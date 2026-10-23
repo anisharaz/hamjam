@@ -8,9 +8,9 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    statusBarIconBrightness: Brightness.dark,
     systemNavigationBarColor: Palette.bgBottom,
-    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarIconBrightness: Brightness.dark,
   ));
   runApp(const HamJamApp());
 }

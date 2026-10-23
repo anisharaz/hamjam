@@ -69,7 +69,7 @@ class _SessionPageState extends State<SessionPage> {
         builder: (ctx) {
           _dialogCtx = ctx;
           return AlertDialog(
-            backgroundColor: const Color(0xFF1F1238),
+            backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             icon: const Icon(Icons.swap_horiz_rounded, size: 32, color: Palette.pink),
             title: const Text('Switch roles?'),
@@ -99,7 +99,7 @@ class _SessionPageState extends State<SessionPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1238),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(host ? 'End this jam?' : 'Leave this jam?'),
         content: Text(host ? 'Your listener will be disconnected.' : 'You can rejoin with the same code while it is running.'),
@@ -165,7 +165,7 @@ class _SessionPageState extends State<SessionPage> {
         StatusChip(state: _s.state),
         if (live)
           PopupMenuButton<String>(
-            color: const Color(0xFF2A1B52),
+            color: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             onSelected: (v) {
               if (v == 'swap') _s.requestSwap();
@@ -203,7 +203,7 @@ class _SessionPageState extends State<SessionPage> {
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('INVITE CODE',
-                style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white.withValues(alpha: 0.55))),
+                style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Palette.ink.withValues(alpha: 0.55))),
             const SizedBox(height: 2),
             GradientText(_s.code.isEmpty ? '······' : _s.code,
                 style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: 8)),
@@ -259,7 +259,7 @@ class _SessionPageState extends State<SessionPage> {
         const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
         const SizedBox(width: 10),
         Text('Waiting for your partner to approve…',
-            style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.7))),
+            style: TextStyle(fontSize: 13, color: Palette.ink.withValues(alpha: 0.7))),
       ]);
     }
     return TextButton.icon(
@@ -273,9 +273,9 @@ class _SessionPageState extends State<SessionPage> {
     if (_s.chat.isEmpty) {
       return Center(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.chat_bubble_outline_rounded, color: Colors.white.withValues(alpha: 0.25), size: 32),
+          Icon(Icons.chat_bubble_outline_rounded, color: Palette.ink.withValues(alpha: 0.25), size: 32),
           const SizedBox(height: 8),
-          Text('Live chat. Nothing is saved.', style: TextStyle(color: Colors.white.withValues(alpha: 0.45))),
+          Text('Live chat. Nothing is saved.', style: TextStyle(color: Palette.ink.withValues(alpha: 0.45))),
         ]),
       );
     }
@@ -295,7 +295,7 @@ class _SessionPageState extends State<SessionPage> {
             constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.75),
             decoration: BoxDecoration(
               gradient: mine ? Palette.brand : null,
-              color: mine ? null : Colors.white.withValues(alpha: 0.09),
+              color: mine ? null : Palette.ink.withValues(alpha: 0.09),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(18),
                 topRight: const Radius.circular(18),
@@ -303,7 +303,7 @@ class _SessionPageState extends State<SessionPage> {
                 bottomRight: Radius.circular(mine ? 4 : 18),
               ),
             ),
-            child: Text(m.text, style: const TextStyle(fontSize: 15)),
+            child: Text(m.text, style: TextStyle(fontSize: 15, color: mine ? Colors.white : Palette.ink)),
           ),
         );
       },
@@ -327,7 +327,7 @@ class _SessionPageState extends State<SessionPage> {
               onSubmitted: (_) => _send(),
               decoration: InputDecoration(
                 hintText: live ? 'Message' : 'Jam ended',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+                hintStyle: TextStyle(color: Palette.ink.withValues(alpha: 0.4)),
                 border: InputBorder.none,
               ),
             ),

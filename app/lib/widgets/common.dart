@@ -26,7 +26,7 @@ class GradientScaffold extends StatelessWidget {
             height: 320,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [Palette.pink.withValues(alpha: 0.22), Colors.transparent]),
+              gradient: RadialGradient(colors: [Palette.pink.withValues(alpha: 0.28), Colors.transparent]),
             ),
           ),
         ),

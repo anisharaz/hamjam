@@ -78,21 +78,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1B1030),
+      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.viewInsetsOf(ctx).bottom),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('Server', style: Theme.of(ctx).textTheme.titleLarge),
           const SizedBox(height: 4),
-          Text('Address of the HamJam relay.', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
+          Text('Address of the HamJam relay.', style: TextStyle(color: Palette.ink.withValues(alpha: 0.6))),
           const SizedBox(height: 16),
           TextField(
             controller: _server,
             keyboardType: TextInputType.url,
             decoration: InputDecoration(
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.07),
+              fillColor: Palette.ink.withValues(alpha: 0.07),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
             ),
           ),
@@ -104,7 +104,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    final muted = Colors.white.withValues(alpha: 0.62);
+    final muted = Palette.ink.withValues(alpha: 0.62);
     return GradientScaffold(
       child: ListView(padding: const EdgeInsets.fromLTRB(24, 12, 24, 32), children: [
         Row(children: [
@@ -125,11 +125,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           GradientButton(label: 'Host a jam', icon: Icons.podcasts_rounded, onTap: _host),
           const SizedBox(height: 28),
           Row(children: [
-            Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.12))),
+            Expanded(child: Divider(color: Palette.ink.withValues(alpha: 0.12))),
             Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text('or join one', style: TextStyle(color: muted, fontSize: 13))),
-            Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.12))),
+            Expanded(child: Divider(color: Palette.ink.withValues(alpha: 0.12))),
           ]),
           const SizedBox(height: 20),
           Row(children: [
@@ -147,13 +147,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: 10),
                 decoration: InputDecoration(
                   hintText: 'CODE',
-                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25), letterSpacing: 10),
+                  hintStyle: TextStyle(color: Palette.ink.withValues(alpha: 0.25), letterSpacing: 10),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.07),
+                  fillColor: Palette.ink.withValues(alpha: 0.07),
                   contentPadding: const EdgeInsets.symmetric(vertical: 18),
                   enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10))),
+                      borderSide: BorderSide(color: Palette.ink.withValues(alpha: 0.10))),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(20),
                       borderSide: const BorderSide(color: Palette.violet, width: 1.6)),
@@ -168,7 +168,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: _join,
-                  child: const SizedBox(width: 64, height: 64, child: Icon(Icons.arrow_forward_rounded, size: 28)),
+                  child: const SizedBox(width: 64, height: 64, child: Icon(Icons.arrow_forward_rounded, size: 28, color: Colors.white)),
                 ),
               ),
             ),
@@ -194,7 +194,7 @@ class _ActiveCard extends StatelessWidget {
           width: 48,
           height: 48,
           decoration: BoxDecoration(gradient: Palette.brand, borderRadius: BorderRadius.circular(16)),
-          child: const Icon(Icons.graphic_eq_rounded),
+          child: const Icon(Icons.graphic_eq_rounded, color: Colors.white),
         ),
         const SizedBox(width: 14),
         Expanded(
@@ -202,7 +202,7 @@ class _ActiveCard extends StatelessWidget {
             Text(session.isHost ? 'You are hosting' : 'You are listening',
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
             const SizedBox(height: 2),
-            Text('Code ${session.code}', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
+            Text('Code ${session.code}', style: TextStyle(color: Palette.ink.withValues(alpha: 0.6))),
           ]),
         ),
         FilledButton(onPressed: onOpen, child: const Text('Open')),
