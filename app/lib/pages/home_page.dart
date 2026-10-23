@@ -8,7 +8,7 @@ import 'session_page.dart';
 
 const _defaultServer = String.fromEnvironment(
   'SERVER_URL',
-  defaultValue: 'ws://192.168.1.10:8080',
+  defaultValue: 'wss://hamjam.anisharaz.com.np',
 );
 
 class HomePage extends StatefulWidget {
@@ -117,7 +117,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               controller: _server,
               keyboardType: TextInputType.url,
               autocorrect: false,
-              decoration: _fieldDecoration(hint: 'ws://192.168.1.10:8080'),
+              decoration: _fieldDecoration(
+                hint: 'wss://hamjam.anisharaz.com.np',
+              ),
             ),
           ],
         ),

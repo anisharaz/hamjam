@@ -1,5 +1,6 @@
 // HamJam relay: one host per room streams binary audio frames to guests;
 // guests send control commands (JSON) back to the host.
+import { createServer as createHttpServer } from 'node:http';
 import { WebSocketServer } from 'ws';
 import { randomInt, randomBytes } from 'node:crypto';
 
@@ -29,7 +30,20 @@ function endRoom(room) {
 }
 
 export function createServer(port = PORT) {
-  const wss = new WebSocketServer({ port, maxPayload: 256 * 1024 });
+  // Plain HTTP answers health checks; everything else upgrades to WebSocket.
+  const http = createHttpServer((req, res) => {
+    if (req.url === '/healthz') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    } else {
+      res.writeHead(426, { 'content-type': 'text/plain' });
+      res.end('HamJam relay: connect with a WebSocket client.\n');
+    }
+  });
+  const wss = new WebSocketServer({ server: http, maxPayload: 256 * 1024 });
+  const closeWss = wss.close.bind(wss);
+  wss.close = (cb) => { closeWss(() => http.close(cb)); http.closeAllConnections?.(); };
+  http.listen(port);
 
   wss.on('connection', (ws) => {
     let room = null;

@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Debug builds may talk to a plain ws:// relay on the LAN; release builds are wss:// only. -->
+    <application android:usesCleartextTraffic="true"/>
 </manifest>

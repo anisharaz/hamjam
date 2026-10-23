@@ -1,0 +1,44 @@
+# HamJam production stack: the relay plus Caddy, which fetches and renews the
+# HTTPS certificate for the domain and proxies WebSocket traffic (wss://).
+#
+#   cd deploy && docker compose up -d --build
+#
+# Requirements: DNS A/AAAA record for the domain pointing at this machine,
+# and ports 80 + 443 open (80 is needed for the certificate challenge).
+services:
+  relay:
+    build: ../server
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+    # Loopback only: handy for health checks or if you front it with your own proxy instead of Caddy.
+    ports:
+      - "127.0.0.1:${RELAY_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    # Rooms live in memory only; nothing is written to disk.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data      # certificates: keep this volume or you will hit Let's Encrypt rate limits
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

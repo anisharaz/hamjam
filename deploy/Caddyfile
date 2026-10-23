@@ -1,0 +1,4 @@
+hamjam.anisharaz.com.np {
+	# WebSocket upgrades are proxied automatically.
+	reverse_proxy relay:8080
+}
