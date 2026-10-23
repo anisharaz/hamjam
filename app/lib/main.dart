@@ -8,6 +8,8 @@ class HamJamApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'HamJam',
+        locale: const Locale('en'),
+        supportedLocales: const [Locale('en')],
         theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
         home: const CaptureSpike(),
       );
