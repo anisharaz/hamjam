@@ -36,6 +36,11 @@ class GuestService : Service(), Relay.Listener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == JamNotification.ACTION_REPOST) {
+            // the user swiped the "jam is active" notification away: it must stay while the jam runs
+            if (Bus.role.isNotEmpty()) startForegroundNotification() else stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == JamNotification.ACTION_SWAP_DECLINE) {
             Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", false))
             Bus.swapEvent("cancelled")

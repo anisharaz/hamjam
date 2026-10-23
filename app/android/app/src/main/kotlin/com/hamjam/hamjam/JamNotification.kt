@@ -16,6 +16,8 @@ object JamNotification {
     private const val ID_CHAT = 4
     private const val CHANNEL_SWAP = "swap"
     const val ACTION_SWAP_DECLINE = "swap_decline"
+    /** Sent when the user swipes the jam notification away: the service puts it back. */
+    const val ACTION_REPOST = "repost"
     const val EXTRA_SWAP_ACCEPT = "swap_accept"
 
     fun build(ctx: Context, host: Boolean, code: String, guests: Int, stopTarget: Class<*>): Notification {
@@ -33,6 +35,11 @@ object JamNotification {
             Intent(ctx, stopTarget).setAction("stop"),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
+        val repost = PendingIntent.getService(
+            ctx, if (host) 3 else 4,
+            Intent(ctx, stopTarget).setAction(ACTION_REPOST),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+
         val title = if (host) "HamJam is sharing your audio" else "HamJam is playing a shared jam"
         val text = when {
             code.isEmpty() -> "Connecting…"
@@ -46,6 +53,8 @@ object JamNotification {
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, if (host) "End jam" else "Leave", stop).build())
             .setOngoing(true)
+            .setDeleteIntent(repost)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setOnlyAlertOnce(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
