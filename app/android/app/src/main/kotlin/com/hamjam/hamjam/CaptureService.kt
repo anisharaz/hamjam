@@ -17,15 +17,14 @@ import android.os.IBinder
 import kotlin.math.sqrt
 
 /**
- * Foreground service that captures the audio of ONE app (matched by UID)
- * using AudioPlaybackCapture. For now it only reports the signal level;
+ * Foreground service that captures all media/game audio (not calls or
+ * notifications) using AudioPlaybackCapture. For now it only reports the level;
  * later the PCM frames feed the WebRTC encoder.
  */
 class CaptureService : Service() {
     companion object {
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_DATA = "data"
-        const val EXTRA_UID = "uid"
         const val ACTION_STOP = "stop"
         const val SAMPLE_RATE = 48000
 
@@ -52,7 +51,6 @@ class CaptureService : Service() {
         val resultCode = intent!!.getIntExtra(EXTRA_RESULT_CODE, 0)
         @Suppress("DEPRECATION")
         val data = intent.getParcelableExtra<Intent>(EXTRA_DATA)!!
-        val uid = intent.getIntExtra(EXTRA_UID, -1)
 
         try {
             val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -66,7 +64,6 @@ class CaptureService : Service() {
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
-                .addMatchingUid(uid)
                 .build()
             val format = AudioFormat.Builder()
                 .setEncoding(AudioFormat.ENCODING_PCM_16BIT)

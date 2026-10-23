@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.view.KeyEvent
 import android.media.projection.MediaProjectionManager
 import android.os.Handler
 import android.os.Looper
@@ -16,7 +18,6 @@ class MainActivity : FlutterActivity() {
     private val reqProjection = 1001
     private val main = Handler(Looper.getMainLooper())
     private var events: EventChannel.EventSink? = null
-    private var pendingUid = -1
     private var pendingResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -39,7 +40,19 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(messenger, "hamjam/capture").setMethodCallHandler { call, result ->
             when (call.method) {
-                "listApps" -> result.success(listApps())
+                "mediaKey" -> {
+                    val code = when (call.argument<String>("key")) {
+                        "playPause" -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+                        "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+                        "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                        else -> null
+                    }
+                    if (code == null) { result.notImplemented(); return@setMethodCallHandler }
+                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+                    am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
+                    result.success(null)
+                }
                 "start" -> {
                     val needed = arrayOf(
                         android.Manifest.permission.RECORD_AUDIO,
@@ -50,7 +63,6 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                         return@setMethodCallHandler
                     }
-                    pendingUid = call.argument<Int>("uid")!!
                     pendingResult = result
                     val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                     @Suppress("DEPRECATION")
@@ -76,26 +88,10 @@ class MainActivity : FlutterActivity() {
             val i = Intent(this, CaptureService::class.java)
                 .putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
                 .putExtra(CaptureService.EXTRA_DATA, data)
-                .putExtra(CaptureService.EXTRA_UID, pendingUid)
             startForegroundService(i)
             res?.success(true)
         } else {
             res?.success(false)
         }
-    }
-
-    /** Launchable apps, sorted by name. */
-    private fun listApps(): List<Map<String, Any>> {
-        val pm = packageManager
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        return pm.queryIntentActivities(intent, 0)
-            .map { it.activityInfo.applicationInfo }
-            .distinctBy { it.packageName }
-            .filter { it.packageName != packageName }
-            .map { mapOf(
-                "name" to pm.getApplicationLabel(it).toString(),
-                "package" to it.packageName,
-                "uid" to it.uid) }
-            .sortedBy { (it["name"] as String).lowercase() }
     }
 }
