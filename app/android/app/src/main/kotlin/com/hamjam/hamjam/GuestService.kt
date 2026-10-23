@@ -74,7 +74,12 @@ class GuestService : Service(), Relay.Listener {
             "swap_declined" -> { Swap.clear(); Bus.swapEvent("declined") }
             "swap_go" -> if (msg.optString("newRole") == "host") takeOver(msg.optString("token"))
             "playback" -> Bus.emit("playing" to msg.optBoolean("playing"))
-            "chat" -> Bus.addChat(msg.optString("from"), msg.optString("text"), msg.optLong("ts"))
+            "chat" -> {
+                val from = msg.optString("from")
+                val text = msg.optString("text")
+                Bus.addChat(from, text, msg.optLong("ts"))
+                JamNotification.onChat(this, from, text)
+            }
             "ended" -> shutdown("the host ended the jam")
             "meta" -> if (msg.has("csd")) startPlayer(
                 msg.getInt("sampleRate"), msg.getInt("channels"),
@@ -198,6 +203,7 @@ class GuestService : Service(), Relay.Listener {
         relay?.close(); relay = null
         keepAlive.release()
         JamNotification.cancelSwapRequest(this)
+        JamNotification.cancelChat(this)
         if (state != "swap") Bus.end(state)
         stopSelf()
     }

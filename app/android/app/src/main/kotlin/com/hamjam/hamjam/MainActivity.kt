@@ -137,6 +137,7 @@ class MainActivity : FlutterActivity() {
         super.onResume()
         Bus.uiVisible = true
         JamNotification.cancelSwapRequest(this)
+        JamNotification.cancelChat(this)
         handleIntent(intent)
     }
 

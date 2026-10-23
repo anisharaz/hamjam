@@ -26,6 +26,8 @@ object Bus {
     @Volatile var swapIn = ""        // who asked us to swap: "host" | "guest" | ""
     @Volatile var swapOut = false    // we asked and are waiting for an answer
     private val chat = CopyOnWriteArrayList<Map<String, Any>>()
+    /** Messages received while the app was off screen (shown in the notification). */
+    val unread = CopyOnWriteArrayList<String>()
 
     fun begin(role: String, url: String, sender: (JSONObject) -> Unit) {
         val keep = swapping   // after a role swap the room code and chat carry over

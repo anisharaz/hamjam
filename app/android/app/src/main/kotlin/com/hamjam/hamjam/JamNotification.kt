@@ -13,6 +13,7 @@ object JamNotification {
     const val ID_HOST = 1
     const val ID_GUEST = 2
     private const val ID_SWAP = 3
+    private const val ID_CHAT = 4
     private const val CHANNEL_SWAP = "swap"
     const val ACTION_SWAP_DECLINE = "swap_decline"
     const val EXTRA_SWAP_ACCEPT = "swap_accept"
@@ -84,4 +85,38 @@ object JamNotification {
 
     fun cancelSwapRequest(ctx: Context) =
         ctx.getSystemService(NotificationManager::class.java).cancel(ID_SWAP)
+
+    /** Heads-up notification for a chat message that arrived while the app is off screen. */
+    fun onChat(ctx: Context, from: String, text: String) {
+        if (from == Bus.role || Bus.uiVisible) return  // our own echo, or the user is looking at it
+        Bus.unread.add(text)
+        while (Bus.unread.size > 5) Bus.unread.removeAt(0)
+
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel("chat", "Messages", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Chat messages from your partner during a jam"
+            })
+        val open = PendingIntent.getActivity(
+            ctx, 20,
+            Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val lines = Bus.unread.toList()
+        val style = Notification.InboxStyle()
+        lines.forEach { style.addLine(it) }
+        nm.notify(ID_CHAT, Notification.Builder(ctx, "chat")
+            .setContentTitle(if (lines.size == 1) "Message from your partner" else "${lines.size} new messages")
+            .setContentText(lines.last())
+            .setStyle(style)
+            .setSmallIcon(android.R.drawable.stat_notify_chat)
+            .setContentIntent(open)
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .build())
+    }
+
+    fun cancelChat(ctx: Context) {
+        Bus.unread.clear()
+        ctx.getSystemService(NotificationManager::class.java).cancel(ID_CHAT)
+    }
 }
