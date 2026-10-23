@@ -42,23 +42,27 @@ class MainActivity : FlutterActivity() {
                     if (ok) result.success(null) else result.notImplemented()
                 }
                 "host" -> {
-                    if (!ensurePermissions()) { result.success(false); return@setMethodCallHandler }
-                    pendingUrl = call.argument<String>("url")!!
-                    pendingResult = result
-                    val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(mgr.createScreenCaptureIntent(), reqProjection)
+                    val url = call.argument<String>("url")!!
+                    withPermissions(needMic = true, onDenied = { result.success(false) }) {
+                        pendingUrl = url
+                        pendingResult = result
+                        askProjection(reqProjection)
+                    }
                 }
                 "stopHost" -> {
                     startService(Intent(this, CaptureService::class.java).setAction(CaptureService.ACTION_STOP))
                     result.success(null)
                 }
                 "join" -> {
-                    if (!ensurePermissions()) { result.success(false); return@setMethodCallHandler }
-                    startForegroundService(Intent(this, GuestService::class.java)
-                        .putExtra(GuestService.EXTRA_URL, call.argument<String>("url"))
-                        .putExtra(GuestService.EXTRA_CODE, call.argument<String>("code")))
-                    result.success(true)
+                    val url = call.argument<String>("url")
+                    val code = call.argument<String>("code")
+                    // listening needs no microphone; notifications are nice-to-have
+                    withPermissions(needMic = false, onDenied = { result.success(false) }) {
+                        startForegroundService(Intent(this, GuestService::class.java)
+                            .putExtra(GuestService.EXTRA_URL, url)
+                            .putExtra(GuestService.EXTRA_CODE, code))
+                        result.success(true)
+                    }
                 }
                 "leave" -> {
                     startService(Intent(this, GuestService::class.java).setAction(GuestService.ACTION_STOP))
@@ -76,9 +80,10 @@ class MainActivity : FlutterActivity() {
                 "swapRequest" -> {
                     if (Bus.role == "guest") {
                         // becoming host needs the screen-capture consent up front
-                        if (!ensurePermissions()) { result.success(false); return@setMethodCallHandler }
-                        pendingResult = result
-                        askProjection(reqSwapRequest)
+                        withPermissions(needMic = true, onDenied = { result.success(false) }) {
+                            pendingResult = result
+                            askProjection(reqSwapRequest)
+                        }
                     } else {
                         Bus.swapEvent("waiting")
                         Bus.sender?.invoke(JSONObject().put("type", "swap_request"))
@@ -89,9 +94,10 @@ class MainActivity : FlutterActivity() {
                     val accept = call.argument<Boolean>("accept") == true
                     if (accept && Bus.role == "guest") {
                         // accepting means this phone will host: get consent first
-                        if (!ensurePermissions()) { respondSwap(false); result.success(false); return@setMethodCallHandler }
-                        pendingResult = result
-                        askProjection(reqSwapAccept)
+                        withPermissions(needMic = true, onDenied = { respondSwap(false); result.success(false) }) {
+                            pendingResult = result
+                            askProjection(reqSwapAccept)
+                        }
                     } else {
                         respondSwap(accept)
                         result.success(true)
@@ -113,15 +119,35 @@ class MainActivity : FlutterActivity() {
         Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", accept))
     }
 
-    /** Asks for mic (needed by playback capture) + notifications. False = asked, user must retry. */
-    private fun ensurePermissions(): Boolean {
-        val needed = arrayOf(
+    private var afterPermissions: ((Boolean) -> Unit)? = null
+
+    /**
+     * Runs [block] once the needed runtime permissions are sorted out: immediately if
+     * already granted, otherwise after the user answers the system dialog.
+     * [onDenied] runs instead if the microphone (when [needMic]) is refused.
+     */
+    private fun withPermissions(needMic: Boolean, onDenied: () -> Unit, block: () -> Unit) {
+        val wanted = arrayOf(
             android.Manifest.permission.RECORD_AUDIO,
             android.Manifest.permission.POST_NOTIFICATIONS)
             .filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
-        if (needed.isEmpty()) return true
-        requestPermissions(needed.toTypedArray(), 1002)
-        return false
+        if (wanted.isEmpty()) { block(); return }
+        afterPermissions = { micGranted ->
+            if (!needMic || micGranted) block() else onDenied()
+        }
+        requestPermissions(wanted.toTypedArray(), 1002)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 1002) return
+        val cb = afterPermissions
+        afterPermissions = null
+        // RECORD_AUDIO may not be in the request if it was already granted
+        val micAsked = permissions.indexOf(android.Manifest.permission.RECORD_AUDIO)
+        val micGranted = if (micAsked >= 0) grantResults[micAsked] == PackageManager.PERMISSION_GRANTED
+            else checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        cb?.invoke(micGranted)
     }
 
     @Deprecated("Deprecated in Java")

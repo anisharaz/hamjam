@@ -57,7 +57,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (ok) {
       _openSession();
     } else {
-      _say('Allow the permissions, then tap again.');
+      _say('Permission was not granted.');
     }
   }
 
@@ -70,7 +70,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _code.clear();
       _openSession();
     } else {
-      _say('Allow the permissions, then tap again.');
+      _say('Permission was not granted.');
     }
   }
 
