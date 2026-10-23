@@ -12,6 +12,10 @@ object JamNotification {
     private const val CHANNEL = "jam"
     const val ID_HOST = 1
     const val ID_GUEST = 2
+    private const val ID_SWAP = 3
+    private const val CHANNEL_SWAP = "swap"
+    const val ACTION_SWAP_DECLINE = "swap_decline"
+    const val EXTRA_SWAP_ACCEPT = "swap_accept"
 
     fun build(ctx: Context, host: Boolean, code: String, guests: Int, stopTarget: Class<*>): Notification {
         ctx.getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -49,4 +53,35 @@ object JamNotification {
 
     fun update(ctx: Context, id: Int, n: Notification) =
         ctx.getSystemService(NotificationManager::class.java).notify(id, n)
+
+    /** Heads-up notification for "your partner wants to switch roles", with Accept / Decline. */
+    fun showSwapRequest(ctx: Context, from: String, declineTarget: Class<*>) {
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_SWAP, "Switch requests", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "When your partner asks to switch host and listener"
+            })
+        val flags = PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        val activity = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        val open = PendingIntent.getActivity(ctx, 10, activity, flags)
+        val accept = PendingIntent.getActivity(ctx, 11, Intent(activity).putExtra(EXTRA_SWAP_ACCEPT, true), flags)
+        val decline = PendingIntent.getService(ctx, 12, Intent(ctx, declineTarget).setAction(ACTION_SWAP_DECLINE), flags)
+
+        val text = if (from == "guest") "Your partner wants to host. You would become the listener."
+                   else "Your partner wants you to host. Your phone would share its audio."
+        nm.notify(ID_SWAP, Notification.Builder(ctx, CHANNEL_SWAP)
+            .setContentTitle("Switch roles?")
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(android.R.drawable.ic_menu_rotate)
+            .setContentIntent(open)
+            .addAction(Notification.Action.Builder(null, "Accept", accept).build())
+            .addAction(Notification.Action.Builder(null, "Decline", decline).build())
+            .setCategory(Notification.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .build())
+    }
+
+    fun cancelSwapRequest(ctx: Context) =
+        ctx.getSystemService(NotificationManager::class.java).cancel(ID_SWAP)
 }

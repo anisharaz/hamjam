@@ -36,6 +36,13 @@ class GuestService : Service(), Relay.Listener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == JamNotification.ACTION_SWAP_DECLINE) {
+            Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", false))
+            Bus.swapEvent("cancelled")
+            JamNotification.cancelSwapRequest(this)
+            if (Bus.role.isEmpty()) stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) { shutdown("left"); return START_NOT_STICKY }
         startForegroundNotification()
         code = intent!!.getStringExtra(EXTRA_CODE)!!
@@ -58,8 +65,12 @@ class GuestService : Service(), Relay.Listener {
         when (msg.optString("type")) {
             "joined" -> Bus.emit("state" to "connected")
             "error" -> shutdown(if (msg.optString("error") == "room_not_found") "room not found" else "error")
-            "swap_request" -> Bus.swapEvent("request", msg.optString("from"))
-            "swap_cancelled" -> Bus.swapEvent("cancelled")
+            "swap_request" -> {
+                val from = msg.optString("from")
+                Bus.swapEvent("request", from)
+                if (!Bus.uiVisible) JamNotification.showSwapRequest(this, from, GuestService::class.java)
+            }
+            "swap_cancelled" -> { Bus.swapEvent("cancelled"); JamNotification.cancelSwapRequest(this) }
             "swap_declined" -> { Swap.clear(); Bus.swapEvent("declined") }
             "swap_go" -> if (msg.optString("newRole") == "host") takeOver(msg.optString("token"))
             "playback" -> Bus.emit("playing" to msg.optBoolean("playing"))
@@ -186,6 +197,7 @@ class GuestService : Service(), Relay.Listener {
         player = null
         relay?.close(); relay = null
         keepAlive.release()
+        JamNotification.cancelSwapRequest(this)
         if (state != "swap") Bus.end(state)
         stopSelf()
     }

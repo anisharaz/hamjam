@@ -50,6 +50,13 @@ class CaptureService : Service(), Relay.Listener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == JamNotification.ACTION_SWAP_DECLINE) {
+            Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", false))
+            Bus.swapEvent("cancelled")
+            JamNotification.cancelSwapRequest(this)
+            if (Bus.role.isEmpty()) stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_STOP) {
             shutdown("stopped")
             return START_NOT_STICKY
@@ -101,8 +108,12 @@ class CaptureService : Service(), Relay.Listener {
                 refreshNotification()
             }
             "control" -> MediaKeys.send(this, msg.optString("key"))
-            "swap_request" -> Bus.swapEvent("request", msg.optString("from"))
-            "swap_cancelled" -> Bus.swapEvent("cancelled")
+            "swap_request" -> {
+                val from = msg.optString("from")
+                Bus.swapEvent("request", from)
+                if (!Bus.uiVisible) JamNotification.showSwapRequest(this, from, CaptureService::class.java)
+            }
+            "swap_cancelled" -> { Bus.swapEvent("cancelled"); JamNotification.cancelSwapRequest(this) }
             "swap_declined" -> { Swap.clear(); Bus.swapEvent("declined") }
             "swap_go" -> if (msg.optString("newRole") == "guest") handOver()
             "error" -> shutdown("error: ${msg.optString("error")}")
@@ -118,6 +129,7 @@ class CaptureService : Service(), Relay.Listener {
     private fun handOver() {
         val url = Bus.url
         val code = Bus.code
+        MediaKeys.pauseIfPlaying(this)  // we become the listener: stop our own music
         Bus.swapping = true
         shutdown("swap")
         startForegroundService(Intent(this, GuestService::class.java)
@@ -259,6 +271,7 @@ class CaptureService : Service(), Relay.Listener {
         relay?.close(); relay = null
         projection?.stop(); projection = null
         keepAlive.release()
+        JamNotification.cancelSwapRequest(this)
         if (state != "swap") Bus.end(state)
         stopSelf()
     }

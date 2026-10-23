@@ -90,19 +90,7 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                 }
-                "swapRespond" -> {
-                    val accept = call.argument<Boolean>("accept") == true
-                    if (accept && Bus.role == "guest") {
-                        // accepting means this phone will host: get consent first
-                        withPermissions(needMic = true, onDenied = { respondSwap(false); result.success(false) }) {
-                            pendingResult = result
-                            askProjection(reqSwapAccept)
-                        }
-                    } else {
-                        respondSwap(accept)
-                        result.success(true)
-                    }
-                }
+                "swapRespond" -> respondToSwap(call.argument<Boolean>("accept") == true) { result.success(it) }
                 else -> result.notImplemented()
             }
         }
@@ -114,7 +102,51 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(mgr.createScreenCaptureIntent(), code)
     }
 
+    /** Answers a partner's switch request (from the in-app dialog or the notification). */
+    private fun respondToSwap(accept: Boolean, done: (Boolean) -> Unit) {
+        if (accept && Bus.role == "guest") {
+            // accepting means this phone will host: get consent first
+            withPermissions(needMic = true, onDenied = { respondSwap(false); done(false) }) {
+                pendingResult = object : MethodChannel.Result {
+                    override fun success(r: Any?) = done(r == true)
+                    override fun error(c: String, m: String?, d: Any?) = done(false)
+                    override fun notImplemented() = done(false)
+                }
+                askProjection(reqSwapAccept)
+            }
+        } else {
+            if (accept && Bus.role == "host") MediaKeys.pauseIfPlaying(this)  // about to become the listener
+            respondSwap(accept)
+            done(true)
+        }
+    }
+
+    private fun handleIntent(i: Intent?) {
+        if (i?.getBooleanExtra(JamNotification.EXTRA_SWAP_ACCEPT, false) == true) {
+            i.removeExtra(JamNotification.EXTRA_SWAP_ACCEPT)
+            if (Bus.swapIn.isNotEmpty()) respondToSwap(true) {}
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Bus.uiVisible = true
+        JamNotification.cancelSwapRequest(this)
+        handleIntent(intent)
+    }
+
+    override fun onPause() {
+        Bus.uiVisible = false
+        super.onPause()
+    }
+
     private fun respondSwap(accept: Boolean) {
+        JamNotification.cancelSwapRequest(this)
         Bus.swapEvent("cancelled")
         Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", accept))
     }

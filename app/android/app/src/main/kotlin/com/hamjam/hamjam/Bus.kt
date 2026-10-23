@@ -21,6 +21,8 @@ object Bus {
     @Volatile var url = ""
     /** Role swap in flight: services hand over to each other without ending the session. */
     @Volatile var swapping = false
+    /** True while the app is on screen (then the in-app dialog is enough, no notification). */
+    @Volatile var uiVisible = false
     @Volatile var swapIn = ""        // who asked us to swap: "host" | "guest" | ""
     @Volatile var swapOut = false    // we asked and are waiting for an answer
     private val chat = CopyOnWriteArrayList<Map<String, Any>>()
