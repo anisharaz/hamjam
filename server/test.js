@@ -37,6 +37,16 @@ await wait();
 assert.deepEqual(host.msgs.filter((m) => m.type === 'control'), [{ type: 'control', key: 'next' }]);
 assert.equal(guest.msgs.filter((m) => Buffer.isBuffer(m)).length, 1);
 
+// playback state: relayed to guests and replayed to late joiners
+host.send(JSON.stringify({ type: 'playback', playing: true }));
+await wait();
+assert.deepEqual(guest.msgs.at(-1), { type: 'playback', playing: true });
+const joiner = await open(url);
+joiner.send(JSON.stringify({ type: 'join', code }));
+await wait();
+assert.deepEqual(joiner.msgs.find((m) => m.type === 'playback'), { type: 'playback', playing: true });
+joiner.close();
+
 // chat: relayed to both sides with sender role, trimmed, empty/oversized handled, rate limited
 guest.send(JSON.stringify({ type: 'chat', text: '  hi  ' }));
 host.send(JSON.stringify({ type: 'chat', text: 'hello' }));
@@ -58,9 +68,57 @@ await wait();
 assert.equal(chats(late).length, 0);
 late.close();
 
+// ---- role swap: guest asks to host, host approves
+const last = (w, t) => w.msgs.filter((m) => m.type === t).at(-1);
+guest.send(JSON.stringify({ type: 'swap_request' }));
+await wait();
+assert.deepEqual(last(host, 'swap_request'), { type: 'swap_request', from: 'guest' });
+host.send(JSON.stringify({ type: 'swap_response', accept: false }));
+await wait();
+assert.equal(last(guest, 'swap_declined').reason, 'declined');
+
+guest.send(JSON.stringify({ type: 'swap_request' }));
+guest.send(JSON.stringify({ type: 'swap_response', accept: true })); // requester can't approve own request
+await wait();
+assert.equal(last(guest, 'swap_go'), undefined);
+host.send(JSON.stringify({ type: 'swap_response', accept: true }));
+await wait();
+const goNew = last(guest, 'swap_go');
+assert.equal(goNew.newRole, 'host');
+assert.equal(last(host, 'swap_go').newRole, 'guest');
+
+// old host leaves; room must survive. wrong token is rejected, right token claims host.
 host.close();
 await wait();
-assert.equal(guest.msgs.at(-1).type, 'ended');
+const impostor = await open(url);
+impostor.send(JSON.stringify({ type: 'claim', code, token: 'nope' }));
+await wait();
+assert.equal(impostor.msgs[0].error, 'claim_rejected');
+const newHost = await open(url);
+newHost.send(JSON.stringify({ type: 'claim', code, token: goNew.token }));
+guest.close(); // new host's old listener connection goes away
+await wait();
+assert.deepEqual(newHost.msgs.map((m) => m.type).slice(0, 2), ['created', 'guests']);
+const oldHost = await open(url);
+oldHost.send(JSON.stringify({ type: 'join', code }));
+await wait();
+assert.equal(oldHost.msgs[0].type, 'joined');
+assert.deepEqual(last(newHost, 'guests'), { type: 'guests', count: 1 });
+newHost.send(Buffer.from([7]));
+await wait();
+assert.deepEqual([...oldHost.msgs.at(-1)], [7]);
+
+// host-initiated handover, declined path and no-guest path
+newHost.send(JSON.stringify({ type: 'swap_request' }));
+await wait();
+assert.deepEqual(last(oldHost, 'swap_request'), { type: 'swap_request', from: 'host' });
+oldHost.send(JSON.stringify({ type: 'swap_response', accept: false }));
+await wait();
+assert.equal(last(newHost, 'swap_declined').reason, 'declined');
+
+newHost.close();
+await wait();
+assert.equal(oldHost.msgs.at(-1).type, 'ended');
 console.log('server tests passed');
 wss.close();
 process.exit(0);

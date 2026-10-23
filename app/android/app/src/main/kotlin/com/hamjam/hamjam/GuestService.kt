@@ -43,7 +43,7 @@ class GuestService : Service(), Relay.Listener {
         keepAlive.acquire()
         val r = Relay(intent.getStringExtra(EXTRA_URL)!!, this)
         relay = r
-        Bus.begin("guest") { r.sendJson(it) }
+        Bus.begin("guest", intent.getStringExtra(EXTRA_URL)!!) { r.sendJson(it) }
         Bus.emit("code" to code)
         refreshNotification()
         r.connect()
@@ -58,12 +58,33 @@ class GuestService : Service(), Relay.Listener {
         when (msg.optString("type")) {
             "joined" -> Bus.emit("state" to "connected")
             "error" -> shutdown(if (msg.optString("error") == "room_not_found") "room not found" else "error")
+            "swap_request" -> Bus.swapEvent("request", msg.optString("from"))
+            "swap_cancelled" -> Bus.swapEvent("cancelled")
+            "swap_declined" -> { Swap.clear(); Bus.swapEvent("declined") }
+            "swap_go" -> if (msg.optString("newRole") == "host") takeOver(msg.optString("token"))
+            "playback" -> Bus.emit("playing" to msg.optBoolean("playing"))
             "chat" -> Bus.addChat(msg.optString("from"), msg.optString("text"), msg.optLong("ts"))
             "ended" -> shutdown("the host ended the jam")
             "meta" -> if (msg.has("csd")) startPlayer(
                 msg.getInt("sampleRate"), msg.getInt("channels"),
                 Base64.decode(msg.getString("csd"), Base64.NO_WRAP))
         }
+    }
+
+    /** Approved swap: stop listening and start sharing in the same room. */
+    private fun takeOver(token: String) {
+        val data = Swap.data
+        if (data == null) { shutdown("error: screen-capture permission missing"); return }
+        val i = Intent(this, CaptureService::class.java)
+            .putExtra(CaptureService.EXTRA_RESULT_CODE, Swap.resultCode)
+            .putExtra(CaptureService.EXTRA_DATA, data)
+            .putExtra(CaptureService.EXTRA_URL, Bus.url)
+            .putExtra(CaptureService.EXTRA_CODE, code)
+            .putExtra(CaptureService.EXTRA_TOKEN, token)
+        Swap.clear()
+        Bus.swapping = true
+        shutdown("swap")
+        startForegroundService(i)
     }
 
     override fun onAudio(frame: ByteArray) {
@@ -104,6 +125,7 @@ class GuestService : Service(), Relay.Listener {
 
                 val info = MediaCodec.BufferInfo()
                 var pts = 0L
+                var lastLevel = 0L
                 while (playing) {
                     val f = frames.poll(20, TimeUnit.MILLISECONDS)
                     if (f != null) {
@@ -124,6 +146,15 @@ class GuestService : Service(), Relay.Listener {
                         ob.position(info.offset); ob.get(pcm)
                         dec.releaseOutputBuffer(oi, false)
                         track.write(pcm, 0, pcm.size)
+                        val now = System.currentTimeMillis()
+                        if (now - lastLevel >= 100) {
+                            lastLevel = now
+                            val sb = ByteBuffer.wrap(pcm).order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
+                            var sum = 0.0
+                            val n = sb.remaining()
+                            for (i in 0 until n) { val v = sb.get(i).toDouble(); sum += v * v }
+                            if (n > 0) Bus.emit("level" to kotlin.math.sqrt(sum / n) / Short.MAX_VALUE)
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -155,7 +186,7 @@ class GuestService : Service(), Relay.Listener {
         player = null
         relay?.close(); relay = null
         keepAlive.release()
-        Bus.end(state)
+        if (state != "swap") Bus.end(state)
         stopSelf()
     }
 

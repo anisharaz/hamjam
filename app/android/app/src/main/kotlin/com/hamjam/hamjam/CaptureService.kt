@@ -29,6 +29,8 @@ class CaptureService : Service(), Relay.Listener {
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_DATA = "data"
         const val EXTRA_URL = "url"
+        const val EXTRA_CODE = "code"
+        const val EXTRA_TOKEN = "token"
         const val ACTION_STOP = "stop"
         const val SAMPLE_RATE = 48000
         const val CHANNELS = 2
@@ -40,6 +42,9 @@ class CaptureService : Service(), Relay.Listener {
     private var encoder: MediaCodec? = null
     private var relay: Relay? = null
     private var thread: Thread? = null
+    private var closing = false
+    private var claimCode = ""
+    private var claimToken = ""
     private val keepAlive by lazy { KeepAlive(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -55,6 +60,8 @@ class CaptureService : Service(), Relay.Listener {
         @Suppress("DEPRECATION")
         val data = intent.getParcelableExtra<Intent>(EXTRA_DATA)!!
         val url = intent.getStringExtra(EXTRA_URL)!!
+        claimCode = intent.getStringExtra(EXTRA_CODE) ?: ""
+        claimToken = intent.getStringExtra(EXTRA_TOKEN) ?: ""
 
         try {
             val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -66,7 +73,7 @@ class CaptureService : Service(), Relay.Listener {
             keepAlive.acquire()
             val r = Relay(url, this)
             relay = r
-            Bus.begin("host") { r.sendJson(it) }
+            Bus.begin("host", url) { r.sendJson(it) }
             r.connect()
         } catch (e: Exception) {
             shutdown("error: ${e.message}")
@@ -77,7 +84,9 @@ class CaptureService : Service(), Relay.Listener {
     // ---- relay events (OkHttp threads) ----
 
     override fun onOpen() {
-        relay?.sendJson(JSONObject().put("type", "create"))
+        relay?.sendJson(
+            if (claimToken.isNotEmpty()) JSONObject().put("type", "claim").put("code", claimCode).put("token", claimToken)
+            else JSONObject().put("type", "create"))
     }
 
     override fun onMessage(msg: JSONObject) {
@@ -92,6 +101,11 @@ class CaptureService : Service(), Relay.Listener {
                 refreshNotification()
             }
             "control" -> MediaKeys.send(this, msg.optString("key"))
+            "swap_request" -> Bus.swapEvent("request", msg.optString("from"))
+            "swap_cancelled" -> Bus.swapEvent("cancelled")
+            "swap_declined" -> { Swap.clear(); Bus.swapEvent("declined") }
+            "swap_go" -> if (msg.optString("newRole") == "guest") handOver()
+            "error" -> shutdown("error: ${msg.optString("error")}")
             "chat" -> Bus.addChat(msg.optString("from"), msg.optString("text"), msg.optLong("ts"))
         }
     }
@@ -99,6 +113,17 @@ class CaptureService : Service(), Relay.Listener {
     override fun onAudio(frame: ByteArray) {}
 
     override fun onClosed(reason: String) = shutdown("disconnected: $reason")
+
+    /** Approved swap: stop sharing, rejoin the same room as a listener. */
+    private fun handOver() {
+        val url = Bus.url
+        val code = Bus.code
+        Bus.swapping = true
+        shutdown("swap")
+        startForegroundService(Intent(this, GuestService::class.java)
+            .putExtra(GuestService.EXTRA_URL, url)
+            .putExtra(GuestService.EXTRA_CODE, code))
+    }
 
     // ---- capture + encode ----
 
@@ -146,6 +171,9 @@ class CaptureService : Service(), Relay.Listener {
         val info = MediaCodec.BufferInfo()
         var ptsUs = 0L
         var lastReport = 0L
+        var lastPoll = 0L
+        var lastPlaying: Boolean? = null
+        val audio = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         try {
             while (running) {
                 val n = rec.read(buf, 0, buf.size)
@@ -162,6 +190,15 @@ class CaptureService : Service(), Relay.Listener {
                 drain(enc, info)
 
                 val now = System.currentTimeMillis()
+                if (now - lastPoll >= 400) {
+                    lastPoll = now
+                    val p = audio.isMusicActive
+                    if (p != lastPlaying) {
+                        lastPlaying = p
+                        Bus.emit("playing" to p)
+                        relay?.sendJson(JSONObject().put("type", "playback").put("playing", p))
+                    }
+                }
                 if (now - lastReport >= 100) {
                     lastReport = now
                     var sum = 0.0
@@ -210,6 +247,8 @@ class CaptureService : Service(), Relay.Listener {
     @Synchronized
     private fun shutdown(state: String) {
         if (!running && relay == null && projection == null) return
+        if (closing) return  // projection.stop() calls back into shutdown
+        closing = true
         running = false
         if (Thread.currentThread() !== thread) thread?.join(500)
         thread = null
@@ -220,7 +259,7 @@ class CaptureService : Service(), Relay.Listener {
         relay?.close(); relay = null
         projection?.stop(); projection = null
         keepAlive.release()
-        Bus.end(state)
+        if (state != "swap") Bus.end(state)
         stopSelf()
     }
 

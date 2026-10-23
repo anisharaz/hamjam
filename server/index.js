@@ -1,7 +1,7 @@
 // HamJam relay: one host per room streams binary audio frames to guests;
 // guests send control commands (JSON) back to the host.
 import { WebSocketServer } from 'ws';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomBytes } from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no look-alikes
@@ -19,7 +19,14 @@ function newCode() {
   }
 }
 
-const send = (ws, obj) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(obj));
+const send = (ws, obj) => ws && ws.readyState === ws.OPEN && ws.send(JSON.stringify(obj));
+const SWAP_TIMEOUT_MS = Number(process.env.SWAP_TIMEOUT_MS || 20000);
+
+function endRoom(room) {
+  clearTimeout(room.swap?.timer);
+  for (const g of room.guests) { send(g, { type: 'ended' }); g.close(); }
+  rooms.delete(room.code);
+}
 
 export function createServer(port = PORT) {
   const wss = new WebSocketServer({ port, maxPayload: 256 * 1024 });
@@ -49,6 +56,19 @@ export function createServer(port = PORT) {
           rooms.set(code, room);
           role = 'host';
           send(ws, { type: 'created', code });
+        } else if (msg.type === 'claim') {
+          // new host after an approved role swap: needs the one-time token from swap_go
+          const r = rooms.get(String(msg.code || '').toUpperCase());
+          if (!r || !r.swap || r.swap.token !== msg.token) return send(ws, { type: 'error', error: 'claim_rejected' });
+          clearTimeout(r.swap.timer);
+          r.swap = null;
+          r.host = ws;
+          r.meta = null;
+          r.playback = null;
+          room = r;
+          role = 'host';
+          send(ws, { type: 'created', code: r.code });
+          send(ws, { type: 'guests', count: r.guests.size });
         } else if (msg.type === 'join') {
           const r = rooms.get(String(msg.code || '').toUpperCase());
           if (!r) return send(ws, { type: 'error', error: 'room_not_found' });
@@ -57,12 +77,38 @@ export function createServer(port = PORT) {
           room.guests.add(ws);
           send(ws, { type: 'joined', code: room.code });
           if (room.meta) send(ws, room.meta);
+          if (room.playback) send(ws, room.playback);
           send(room.host, { type: 'guests', count: room.guests.size });
         }
         return;
       }
 
-      if (msg.type === 'chat') {
+      if (msg.type === 'swap_request') {
+        if (room.pending || room.swap) return send(ws, { type: 'swap_declined', reason: 'busy' });
+        room.pending = { requester: ws, role };
+        const out = { type: 'swap_request', from: role };
+        if (role === 'guest') send(room.host, out);
+        else for (const g of room.guests) send(g, out);
+        if (role === 'host' && room.guests.size === 0) { room.pending = null; send(ws, { type: 'swap_declined', reason: 'no_guest' }); }
+      } else if (msg.type === 'swap_response') {
+        const p = room.pending;
+        // only the opposite side of the requester may answer
+        if (!p || p.role === role) return;
+        room.pending = null;
+        const others = p.role === 'guest' ? [] : [...room.guests].filter((g) => g !== ws);
+        if (!msg.accept) {
+          send(p.requester, { type: 'swap_declined', reason: 'declined' });
+          if (p.role === 'host') for (const g of others) send(g, { type: 'swap_cancelled' });
+          return;
+        }
+        const newHost = p.role === 'guest' ? p.requester : ws;
+        const oldHost = room.host;
+        const token = randomBytes(16).toString('hex');
+        room.swap = { token, newHost, oldHost, timer: setTimeout(() => endRoom(room), SWAP_TIMEOUT_MS) };
+        for (const g of others) send(g, { type: 'swap_cancelled' });
+        send(newHost, { type: 'swap_go', newRole: 'host', token });
+        send(oldHost, { type: 'swap_go', newRole: 'guest' });
+      } else if (msg.type === 'chat') {
         // ephemeral: relayed to everyone in the room, never stored
         const text = typeof msg.text === 'string' ? msg.text.trim().slice(0, MAX_CHAT) : '';
         const now = Date.now();
@@ -73,6 +119,10 @@ export function createServer(port = PORT) {
         for (const g of room.guests) send(g, out);
       } else if (role === 'guest' && msg.type === 'control' && KEYS.has(msg.key)) {
         send(room.host, { type: 'control', key: msg.key });
+      } else if (role === 'host' && msg.type === 'playback') {
+        // is the host's player playing? cached for late joiners
+        room.playback = { type: 'playback', playing: !!msg.playing };
+        for (const g of room.guests) send(g, room.playback);
       } else if (role === 'host' && msg.type === 'meta') {
         // now-playing / codec config etc. cached so late joiners get it
         room.meta = msg;
@@ -82,9 +132,16 @@ export function createServer(port = PORT) {
 
     ws.on('close', () => {
       if (!room) return;
+      if (room.pending?.requester === ws) {
+        // requester vanished: withdraw the request from whoever was asked
+        room.pending = null;
+        send(room.host, { type: 'swap_cancelled' });
+        for (const g of room.guests) send(g, { type: 'swap_cancelled' });
+      }
       if (role === 'host') {
-        for (const g of room.guests) { send(g, { type: 'ended' }); g.close(); }
-        rooms.delete(room.code);
+        if (room.host !== ws) return; // already replaced by a new host
+        if (room.swap && room.swap.oldHost === ws) { room.host = null; return; } // handing over, keep the room
+        endRoom(room);
       } else {
         room.guests.delete(ws);
         send(room.host, { type: 'guests', count: room.guests.size });

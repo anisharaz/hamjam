@@ -15,6 +15,8 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
     private val reqProjection = 1001
+    private val reqSwapRequest = 1003
+    private val reqSwapAccept = 1004
     private val main = Handler(Looper.getMainLooper())
     private var events: EventChannel.EventSink? = null
     private var pendingUrl = ""
@@ -71,9 +73,44 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "status" -> result.success(Bus.snapshot())
+                "swapRequest" -> {
+                    if (Bus.role == "guest") {
+                        // becoming host needs the screen-capture consent up front
+                        if (!ensurePermissions()) { result.success(false); return@setMethodCallHandler }
+                        pendingResult = result
+                        askProjection(reqSwapRequest)
+                    } else {
+                        Bus.swapEvent("waiting")
+                        Bus.sender?.invoke(JSONObject().put("type", "swap_request"))
+                        result.success(true)
+                    }
+                }
+                "swapRespond" -> {
+                    val accept = call.argument<Boolean>("accept") == true
+                    if (accept && Bus.role == "guest") {
+                        // accepting means this phone will host: get consent first
+                        if (!ensurePermissions()) { respondSwap(false); result.success(false); return@setMethodCallHandler }
+                        pendingResult = result
+                        askProjection(reqSwapAccept)
+                    } else {
+                        respondSwap(accept)
+                        result.success(true)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun askProjection(code: Int) {
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        @Suppress("DEPRECATION")
+        startActivityForResult(mgr.createScreenCaptureIntent(), code)
+    }
+
+    private fun respondSwap(accept: Boolean) {
+        Bus.swapEvent("cancelled")
+        Bus.sender?.invoke(JSONObject().put("type", "swap_response").put("accept", accept))
     }
 
     /** Asks for mic (needed by playback capture) + notifications. False = asked, user must retry. */
@@ -90,9 +127,25 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != reqProjection) return
         val res = pendingResult
         pendingResult = null
+        val granted = resultCode == Activity.RESULT_OK && data != null
+        if (requestCode == reqSwapRequest) {
+            if (granted) {
+                Swap.store(resultCode, data!!)
+                Bus.swapEvent("waiting")
+                Bus.sender?.invoke(JSONObject().put("type", "swap_request"))
+            }
+            res?.success(granted)
+            return
+        }
+        if (requestCode == reqSwapAccept) {
+            if (granted) Swap.store(resultCode, data!!)
+            respondSwap(granted)
+            res?.success(granted)
+            return
+        }
+        if (requestCode != reqProjection) return
         if (resultCode == Activity.RESULT_OK && data != null) {
             startForegroundService(Intent(this, CaptureService::class.java)
                 .putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
