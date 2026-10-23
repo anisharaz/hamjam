@@ -1,0 +1,10 @@
+.git
+app
+apks
+deploy
+scripts
+README.md
+**/node_modules
+web/dist
+server/test*.js
+**/*.log

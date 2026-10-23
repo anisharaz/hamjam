@@ -1,4 +1,4 @@
-# HamJam production stack: the relay plus Caddy, which fetches and renews the
+# HamJam production stack: one container with the website + WebSocket relay, plus Caddy, which fetches and renews the
 # HTTPS certificate for the domain and proxies WebSocket traffic (wss://).
 #
 #   cd deploy && docker compose up -d --build
@@ -7,7 +7,9 @@
 # and ports 80 + 443 open (80 is needed for the certificate challenge).
 services:
   relay:
-    build: ../server
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       PORT: "8080"
@@ -19,6 +21,9 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    volumes:
+      # APKs offered at /download/latest.apk (the highest-numbered N.apk, e.g. from scripts/publish-apk.sh)
+      - ../apks:/app/downloads:ro
     # Rooms live in memory only; nothing is written to disk.
     read_only: true
     cap_drop: [ALL]

@@ -1,4 +1,5 @@
 hamjam.anisharaz.com.np {
-	# WebSocket upgrades are proxied automatically.
+	encode zstd gzip
+	# website, APK downloads and WebSocket upgrades all go to the one container
 	reverse_proxy relay:8080
 }

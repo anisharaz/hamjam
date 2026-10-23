@@ -2,11 +2,14 @@
 // guests send control commands (JSON) back to the host.
 import { createServer as createHttpServer } from 'node:http';
 import { WebSocketServer } from 'ws';
+import { createStaticHandler } from './static.js';
 import { randomInt, randomBytes } from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 8080);
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no look-alikes
 const KEYS = new Set(['playPause', 'next', 'previous']);
+const STATIC_DIR = process.env.STATIC_DIR || '';        // built website (web/dist)
+const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || '';  // folder holding APKs
 const MAX_CHAT = 500;
 const CHAT_BURST = 5; // messages per second per connection
 
@@ -30,14 +33,14 @@ function endRoom(room) {
 }
 
 export function createServer(port = PORT) {
-  // Plain HTTP answers health checks; everything else upgrades to WebSocket.
+  // Plain HTTP serves the website, APK downloads and health checks; WebSocket upgrades go to the relay.
+  const site = createStaticHandler({ staticDir: STATIC_DIR, downloadsDir: DOWNLOADS_DIR });
   const http = createHttpServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
     } else {
-      res.writeHead(426, { 'content-type': 'text/plain' });
-      res.end('HamJam relay: connect with a WebSocket client.\n');
+      site(req, res).catch(() => { if (!res.headersSent) res.writeHead(500); res.end(); });
     }
   });
   const wss = new WebSocketServer({ server: http, maxPayload: 256 * 1024 });
