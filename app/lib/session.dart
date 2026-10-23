@@ -17,7 +17,12 @@ class Session extends ChangeNotifier {
 
   static const _method = MethodChannel('hamjam/native');
   static const _events = EventChannel('hamjam/events');
-  static const _liveStates = {'connecting', 'capturing', 'connected', 'listening'};
+  static const _liveStates = {
+    'connecting',
+    'capturing',
+    'connected',
+    'listening',
+  };
 
   String role = ''; // '' when there is no active jam
   String state = 'idle';
@@ -26,6 +31,7 @@ class Session extends ChangeNotifier {
   bool playing = false;
   String swapIn = ''; // partner asked to switch roles: 'host' | 'guest' | ''
   bool swapOut = false; // we asked and are waiting for an answer
+  bool swapBusy = false; // our side of a switch is in progress (permission prompt, handshake)
   final List<ChatMessage> chat = [];
 
   /// One-shot messages for the UI to show as a snackbar.
@@ -48,8 +54,11 @@ class Session extends ChangeNotifier {
       role = m['role'];
       swapIn = '';
       swapOut = false;
+      swapBusy = false;
       if (before.isNotEmpty && before != role) {
-        toast.value = role == 'host' ? 'You are now the host' : 'You are now a listener';
+        toast.value = role == 'host'
+            ? 'You are now the host'
+            : 'You are now a listener';
       }
     }
     if (m['swap'] != null) _onSwap(m['swap']);
@@ -60,6 +69,7 @@ class Session extends ChangeNotifier {
         playing = false;
         swapIn = '';
         swapOut = false;
+        swapBusy = false;
         level.value = 0;
       }
     }
@@ -80,6 +90,7 @@ class Session extends ChangeNotifier {
         swapOut = true;
       case 'declined':
         swapOut = false;
+        swapBusy = false;
         toast.value = 'Switch request declined';
     }
   }
@@ -109,7 +120,9 @@ class Session extends ChangeNotifier {
   }
 
   Future<bool> join(String url, String code) async {
-    final ok = await _method.invokeMethod<bool>('join', {'url': url, 'code': code}) ?? false;
+    final ok =
+        await _method.invokeMethod<bool>('join', {'url': url, 'code': code}) ??
+        false;
     if (ok) {
       this.code = code;
       _begin('guest');
@@ -136,16 +149,29 @@ class Session extends ChangeNotifier {
 
   /// Ask to swap roles. Guests are asked for screen-capture consent first.
   Future<bool> requestSwap() async {
+    swapBusy = true;
+    notifyListeners();
     final ok = await _method.invokeMethod<bool>('swapRequest') ?? false;
+    swapBusy = false;
     if (!ok) toast.value = 'Could not start the switch';
+    notifyListeners();
     return ok;
   }
 
   Future<void> respondSwap(bool accept) async {
     swapIn = '';
+    swapBusy = accept; // stays on until the roles actually switch (or it fails)
     notifyListeners();
-    await _method.invokeMethod('swapRespond', {'accept': accept});
+    final ok =
+        await _method.invokeMethod<bool>('swapRespond', {'accept': accept}) ??
+        false;
+    if (accept && !ok) {
+      swapBusy = false;
+      toast.value = 'Could not switch roles';
+      notifyListeners();
+    }
   }
 
-  Future<void> sendChat(String text) => _method.invokeMethod('chat', {'text': text});
+  Future<void> sendChat(String text) =>
+      _method.invokeMethod('chat', {'text': text});
 }

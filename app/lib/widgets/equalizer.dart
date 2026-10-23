@@ -8,7 +8,12 @@ import '../theme.dart';
 /// Mirrored bar visualizer. Bar height follows the real audio level; each bar
 /// gets its own gentle wobble so it looks like a spectrum.
 class Equalizer extends StatefulWidget {
-  const Equalizer({super.key, required this.level, required this.playing, this.height = 110});
+  const Equalizer({
+    super.key,
+    required this.level,
+    required this.playing,
+    this.height = 110,
+  });
   final ValueListenable<double> level;
   final bool playing;
   final double height;
@@ -17,7 +22,8 @@ class Equalizer extends StatefulWidget {
   State<Equalizer> createState() => _EqualizerState();
 }
 
-class _EqualizerState extends State<Equalizer> with SingleTickerProviderStateMixin {
+class _EqualizerState extends State<Equalizer>
+    with SingleTickerProviderStateMixin {
   static const _bars = 32;
   final _v = List<double>.filled(_bars, 0.05);
   late final AnimationController _ticker =
@@ -32,7 +38,9 @@ class _EqualizerState extends State<Equalizer> with SingleTickerProviderStateMix
       final wobble = (math.sin(t * (2.2 + (i % 5) * 0.55) + i * 1.7) + 1) / 2;
       // centre bars react more, like a real spectrum
       final centre = 1 - ((i - _bars / 2).abs() / (_bars / 2)) * 0.55;
-      final target = widget.playing ? 0.07 + 0.93 * lvl * (0.3 + 0.7 * wobble) * centre : 0.05;
+      final target = widget.playing
+          ? 0.07 + 0.93 * lvl * (0.3 + 0.7 * wobble) * centre
+          : 0.05;
       _v[i] += (target - _v[i]) * 0.28;
     }
   }
@@ -45,10 +53,10 @@ class _EqualizerState extends State<Equalizer> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: widget.height,
-        width: double.infinity,
-        child: CustomPaint(painter: _BarsPainter(_v, _ticker)),
-      );
+    height: widget.height,
+    width: double.infinity,
+    child: CustomPaint(painter: _BarsPainter(_v, _ticker)),
+  );
 }
 
 class _BarsPainter extends CustomPainter {
@@ -66,7 +74,11 @@ class _BarsPainter extends CustomPainter {
       final h = math.max(4.0, v[i] * size.height);
       final x = i * slot + (slot - w) / 2;
       final r = RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(x + w / 2, size.height / 2), width: w, height: h),
+        Rect.fromCenter(
+          center: Offset(x + w / 2, size.height / 2),
+          width: w,
+          height: h,
+        ),
         Radius.circular(w / 2),
       );
       canvas.drawRRect(r, paint);
