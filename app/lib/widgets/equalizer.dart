@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 
 /// Mirrored bar visualizer. Bar height follows the real audio level; each bar
-/// gets its own gentle wobble so it looks like a spectrum.
+/// gets its own gentle wobble so it looks like a spectrum. Flat colour, no gradient.
 class Equalizer extends StatefulWidget {
   const Equalizer({
     super.key,
     required this.level,
     required this.playing,
-    this.height = 110,
+    this.height = 96,
   });
   final ValueListenable<double> level;
   final bool playing;
@@ -24,7 +24,7 @@ class Equalizer extends StatefulWidget {
 
 class _EqualizerState extends State<Equalizer>
     with SingleTickerProviderStateMixin {
-  static const _bars = 32;
+  static const _bars = 30;
   final _v = List<double>.filled(_bars, 0.05);
   late final AnimationController _ticker =
       AnimationController(vsync: this, duration: const Duration(seconds: 1))
@@ -55,33 +55,42 @@ class _EqualizerState extends State<Equalizer>
   Widget build(BuildContext context) => SizedBox(
     height: widget.height,
     width: double.infinity,
-    child: CustomPaint(painter: _BarsPainter(_v, _ticker)),
+    child: CustomPaint(
+      painter: _BarsPainter(_v, () => widget.playing, _ticker),
+    ),
   );
 }
 
 class _BarsPainter extends CustomPainter {
-  _BarsPainter(this.v, Listenable repaint) : super(repaint: repaint);
+  _BarsPainter(this.v, this.playing, Listenable repaint)
+    : super(repaint: repaint);
   final List<double> v;
+  final ValueGetter<bool> playing;
 
   @override
   void paint(Canvas canvas, Size size) {
     final n = v.length;
     final slot = size.width / n;
-    final w = slot * 0.58;
+    final w = slot * 0.56;
+    // idle bars are drawn pale so a paused jam looks calm
     final paint = Paint()
-      ..shader = Palette.brand.createShader(Offset.zero & size);
+      ..color = playing()
+          ? Palette.primary
+          : Palette.primary.withValues(alpha: 0.28);
     for (var i = 0; i < n; i++) {
-      final h = math.max(4.0, v[i] * size.height);
+      final h = math.max(w, v[i] * size.height);
       final x = i * slot + (slot - w) / 2;
-      final r = RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset(x + w / 2, size.height / 2),
-          width: w,
-          height: h,
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(x + w / 2, size.height / 2),
+            width: w,
+            height: h,
+          ),
+          Radius.circular(w / 2),
         ),
-        Radius.circular(w / 2),
+        paint,
       );
-      canvas.drawRRect(r, paint);
     }
   }
 

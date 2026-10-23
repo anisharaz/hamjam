@@ -1,72 +1,121 @@
 import 'package:flutter/material.dart';
 
+/// Plain, flat palette: white and light blue surfaces, one strong blue, one sky accent.
 class Palette {
-  static const bgTop = Color(0xFFFFFFFF);
-  static const bgBottom = Color(0xFFE3F2FD);
-  static const ink = Color(0xFF0D2B4E); // text, dark navy
-  static const violet = Color(
-    0xFF1E6FE0,
-  ); // primary blue (name kept for existing references)
-  static const pink = Color(0xFF38BDF8); // sky blue accent
+  static const bg = Color(0xFFF4F9FF);
+  static const surface = Colors.white;
+  static const tint = Color(
+    0xFFE3F0FF,
+  ); // light blue fill for secondary buttons and incoming bubbles
+  static const border = Color(0xFFDCE8F5);
+  static const primary = Color(0xFF1E6FE0);
+  static const sky = Color(0xFF38BDF8);
+  static const ink = Color(0xFF0D2B4E);
   static const live = Color(0xFF059669);
   static const warn = Color(0xFFD97706);
   static const danger = Color(0xFFDC2626);
 
-  static const brand = LinearGradient(
-    colors: [violet, pink],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  /// Secondary text: the ink colour, softened.
+  static Color get muted => ink.withValues(alpha: 0.6);
+}
+
+/// Shared corner radii so every surface feels related.
+class Radii {
+  static const card = 20.0;
+  static const button = 16.0;
+  static const bubble = 18.0;
 }
 
 ThemeData buildTheme() {
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: Palette.violet,
+        seedColor: Palette.primary,
         brightness: Brightness.light,
       ).copyWith(
-        surface: Colors.white,
-        primary: Palette.violet,
-        secondary: Palette.pink,
+        surface: Palette.surface,
+        primary: Palette.primary,
+        onPrimary: Colors.white,
+        secondary: Palette.sky,
         onSurface: Palette.ink,
       );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    scaffoldBackgroundColor: Colors.transparent,
+    scaffoldBackgroundColor: Palette.bg,
     textTheme: Typography.blackMountainView.apply(
       bodyColor: Palette.ink,
       displayColor: Palette.ink,
     ),
     iconTheme: const IconThemeData(color: Palette.ink),
+    dividerTheme: const DividerThemeData(
+      color: Palette.border,
+      thickness: 1,
+      space: 1,
+    ),
     dialogTheme: DialogThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: Palette.surface,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      titleTextStyle: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: Palette.ink,
+      ),
+      contentTextStyle: TextStyle(
+        fontSize: 15,
+        height: 1.4,
+        color: Palette.muted,
+      ),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Palette.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Palette.border),
+      ),
     ),
-    bottomSheetTheme: const BottomSheetThemeData(backgroundColor: Colors.white),
+    bottomSheetTheme: const BottomSheetThemeData(
+      backgroundColor: Palette.surface,
+      surfaceTintColor: Colors.transparent,
+      showDragHandle: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: Palette.primary,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 44),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.button),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        foregroundColor: Palette.primary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Radii.button),
+        ),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+      ),
+    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: Palette.ink,
-      contentTextStyle: const TextStyle(color: Colors.white),
+      contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
   );
 }
 
-/// White card with a thin blue border and a soft shadow, used across the app.
-BoxDecoration glass({double radius = 24, double fill = 0.9}) => BoxDecoration(
-  color: Colors.white.withValues(alpha: fill),
+/// White card with a thin blue-grey border. Flat: no shadow, no gradient.
+BoxDecoration cardDecoration({double radius = Radii.card}) => BoxDecoration(
+  color: Palette.surface,
   borderRadius: BorderRadius.circular(radius),
-  border: Border.all(color: Palette.violet.withValues(alpha: 0.12)),
-  boxShadow: [
-    BoxShadow(
-      color: Palette.violet.withValues(alpha: 0.08),
-      blurRadius: 20,
-      offset: const Offset(0, 6),
-    ),
-  ],
+  border: Border.all(color: Palette.border),
 );

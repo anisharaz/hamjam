@@ -41,7 +41,9 @@ class _SessionPageState extends State<SessionPage> {
     final m = _s.toast.value;
     if (m == null || !mounted) return;
     _s.toast.value = null;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(m)));
   }
 
   void _onChange() {
@@ -73,21 +75,27 @@ class _SessionPageState extends State<SessionPage> {
         builder: (ctx) {
           _dialogCtx = ctx;
           return AlertDialog(
-            backgroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+            icon: Container(
+              width: 56,
+              height: 56,
+              decoration: const BoxDecoration(
+                color: Palette.tint,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.swap_horiz_rounded,
+                size: 28,
+                color: Palette.primary,
+              ),
             ),
-            icon: const Icon(
-              Icons.swap_horiz_rounded,
-              size: 32,
-              color: Palette.pink,
-            ),
-            title: const Text('Switch roles?'),
+            title: const Text('Switch roles?', textAlign: TextAlign.center),
             content: Text(
               fromGuest
                   ? 'Your partner wants to host. You will become the listener.'
                   : 'Your partner wants you to host. Your phone will share its audio, and you will be asked to allow screen capture.',
+              textAlign: TextAlign.center,
             ),
+            actionsAlignment: MainAxisAlignment.center,
             actions: [
               TextButton(
                 onPressed: () => _answer(false),
@@ -117,13 +125,11 @@ class _SessionPageState extends State<SessionPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(host ? 'End this jam?' : 'Leave this jam?'),
         content: Text(
           host
               ? 'Your listener will be disconnected.'
-              : 'You can rejoin with the same code while it is running.',
+              : 'You can rejoin with the same code while the jam is running.',
         ),
         actions: [
           TextButton(
@@ -131,10 +137,7 @@ class _SessionPageState extends State<SessionPage> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Palette.danger,
-              foregroundColor: Colors.black,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: Palette.danger),
             onPressed: () => Navigator.pop(ctx, true),
             child: Text(host ? 'End jam' : 'Leave'),
           ),
@@ -158,14 +161,38 @@ class _SessionPageState extends State<SessionPage> {
   Widget build(BuildContext context) {
     final compact = MediaQuery.viewInsetsOf(context).bottom > 0;
     final live = _s.active;
-    return GradientScaffold(
+    return AppScaffold(
       child: Stack(
         children: [
-          _body(compact, live),
+          Column(
+            children: [
+              _header(live),
+              _progressBar(live),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                alignment: Alignment.topCenter,
+                child: compact
+                    ? const SizedBox(width: double.infinity)
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                        child: Column(
+                          children: [
+                            _s.isHost ? _hostCodeCard() : _guestCodeCard(),
+                            const SizedBox(height: 12),
+                            _playerCard(live),
+                          ],
+                        ),
+                      ),
+              ),
+              Expanded(child: _chatList()),
+              _inputBar(live),
+            ],
+          ),
           if (_ending)
             Positioned.fill(
               child: ColoredBox(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: Palette.bg.withValues(alpha: 0.8),
                 child: const Center(child: Spinner(size: 36)),
               ),
             ),
@@ -174,48 +201,13 @@ class _SessionPageState extends State<SessionPage> {
     );
   }
 
-  Widget _body(bool compact, bool live) {
-    return Column(
-      children: [
-        _header(live),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          child: live && (_s.state == 'connecting' || _s.swapBusy)
-              ? const LinearProgressIndicator(
-                  minHeight: 3,
-                  backgroundColor: Colors.transparent,
-                )
-              : const SizedBox(height: 3),
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          alignment: Alignment.topCenter,
-          child: compact
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                  child: Column(
-                    children: [
-                      if (_s.isHost) _codeCard(),
-                      if (_s.isHost) const SizedBox(height: 12),
-                      _playerCard(live),
-                    ],
-                  ),
-                ),
-        ),
-        Expanded(child: _chatList(live)),
-        _inputBar(live),
-      ],
-    );
-  }
-
   Widget _header(bool live) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
       child: Row(
         children: [
           IconButton(
+            tooltip: 'Back',
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.arrow_back_rounded),
           ),
@@ -228,10 +220,7 @@ class _SessionPageState extends State<SessionPage> {
           StatusChip(state: _s.state),
           if (live)
             PopupMenuButton<String>(
-              color: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              tooltip: 'Menu',
               onSelected: (v) {
                 if (v == 'swap') _s.requestSwap();
                 if (v == 'end') _confirmEnd();
@@ -240,39 +229,59 @@ class _SessionPageState extends State<SessionPage> {
                 PopupMenuItem(
                   value: 'swap',
                   enabled: !_s.swapOut && !_s.swapBusy,
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.swap_horiz_rounded),
-                    title: Text(
-                      _s.isHost ? 'Hand over hosting' : 'Request to host',
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.swap_horiz_rounded, size: 22),
+                      const SizedBox(width: 12),
+                      Text(_s.isHost ? 'Hand over hosting' : 'Request to host'),
+                    ],
                   ),
                 ),
                 PopupMenuItem(
                   value: 'end',
-                  child: ListTile(
-                    dense: true,
-                    leading: const Icon(
-                      Icons.logout_rounded,
-                      color: Palette.danger,
-                    ),
-                    title: Text(
-                      _s.isHost ? 'End jam' : 'Leave jam',
-                      style: const TextStyle(color: Palette.danger),
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.logout_rounded,
+                        size: 22,
+                        color: Palette.danger,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _s.isHost ? 'End jam' : 'Leave jam',
+                        style: const TextStyle(color: Palette.danger),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
+            )
+          else
+            const SizedBox(width: 8),
         ],
       ),
     );
   }
 
-  Widget _codeCard() {
+  /// Thin bar under the header while connecting or switching roles.
+  Widget _progressBar(bool live) {
+    final busy = live && (_s.state == 'connecting' || _s.swapBusy);
+    return SizedBox(
+      height: 3,
+      child: busy
+          ? const LinearProgressIndicator(
+              minHeight: 3,
+              backgroundColor: Palette.tint,
+            )
+          : null,
+    );
+  }
+
+  Widget _hostCodeCard() {
+    final n = _s.guests;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
-      decoration: glass(),
+      padding: const EdgeInsets.fromLTRB(20, 16, 14, 16),
+      decoration: cardDecoration(),
       child: Row(
         children: [
           Expanded(
@@ -283,50 +292,99 @@ class _SessionPageState extends State<SessionPage> {
                   'INVITE CODE',
                   style: TextStyle(
                     fontSize: 11,
-                    letterSpacing: 1.5,
-                    color: Palette.ink.withValues(alpha: 0.55),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
+                    color: Palette.muted,
                   ),
                 ),
                 const SizedBox(height: 2),
-                GradientText(
-                  _s.code.isEmpty ? '······' : _s.code,
-                  style: const TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 8,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _s.code.isEmpty ? '······' : _s.code,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 7,
+                      color: Palette.primary,
+                    ),
                   ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.headphones_rounded,
+                      size: 16,
+                      color: Palette.muted,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        n == 0
+                            ? 'Waiting for someone to join'
+                            : (n == 1
+                                  ? '1 person listening'
+                                  : '$n people listening'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: Palette.muted),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'Copy code',
-                onPressed: _s.code.isEmpty
-                    ? null
-                    : () {
-                        Clipboard.setData(ClipboardData(text: _s.code));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Code copied')),
-                        );
-                      },
-                icon: const Icon(Icons.copy_rounded),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.headphones_rounded, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${_s.guests}',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-            ],
+          CircleButton(
+            size: 48,
+            tooltip: 'Copy code',
+            onTap: _s.code.isEmpty
+                ? null
+                : () {
+                    Clipboard.setData(ClipboardData(text: _s.code));
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                        const SnackBar(content: Text('Code copied')),
+                      );
+                  },
+            child: const Icon(
+              Icons.copy_rounded,
+              size: 20,
+              color: Palette.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _guestCodeCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: cardDecoration(),
+      child: Row(
+        children: [
+          const Icon(Icons.headphones_rounded, color: Palette.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Listening to your partner',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Text(
+            _s.code,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 3,
+              color: Palette.muted,
+            ),
           ),
         ],
       ),
@@ -334,52 +392,67 @@ class _SessionPageState extends State<SessionPage> {
   }
 
   Widget _playerCard(bool live) {
+    // small phones: shrink the visualizer and drop the inline switch link (it stays in the menu)
+    final short = MediaQuery.sizeOf(context).height < 680;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-      decoration: glass(radius: 28),
+      padding: EdgeInsets.fromLTRB(20, short ? 14 : 20, 20, short ? 12 : 12),
+      decoration: cardDecoration(radius: 24),
       child: Column(
         children: [
           Equalizer(level: _s.level, playing: live && _s.playing),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _RoundIcon(
-                icon: Icons.skip_previous_rounded,
-                onTap: live ? () => _s.control('previous') : null,
+              CircleButton(
+                size: 56,
+                tooltip: 'Previous',
+                onTap: live ? () => _tap(() => _s.control('previous')) : null,
+                child: const Icon(Icons.skip_previous_rounded, size: 30),
               ),
               const SizedBox(width: 20),
               _PlayPause(
                 playing: _s.playing,
-                onTap: live ? () => _s.control('playPause') : null,
+                onTap: live
+                    ? () => _tap(() => _s.control('playPause'), heavy: true)
+                    : null,
               ),
               const SizedBox(width: 20),
-              _RoundIcon(
-                icon: Icons.skip_next_rounded,
-                onTap: live ? () => _s.control('next') : null,
+              CircleButton(
+                size: 56,
+                tooltip: 'Next',
+                onTap: live ? () => _tap(() => _s.control('next')) : null,
+                child: const Icon(Icons.skip_next_rounded, size: 30),
               ),
             ],
           ),
-          if (live) ...[const SizedBox(height: 10), _swapLine()],
+          const SizedBox(height: 8),
+          SizedBox(height: 44, child: Center(child: live ? _swapLine() : null)),
         ],
       ),
     );
   }
 
+  void _tap(VoidCallback action, {bool heavy = false}) {
+    heavy ? HapticFeedback.mediumImpact() : HapticFeedback.selectionClick();
+    action();
+  }
+
   Widget _swapLine() {
     if (_s.swapOut || _s.swapBusy) {
       return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           const Spinner(size: 14),
           const SizedBox(width: 10),
-          Text(
-            _s.swapOut
-                ? 'Waiting for your partner to approve…'
-                : 'Switching roles…',
-            style: TextStyle(
-              fontSize: 13,
-              color: Palette.ink.withValues(alpha: 0.7),
+          Flexible(
+            child: Text(
+              _s.swapOut
+                  ? 'Waiting for your partner to approve…'
+                  : 'Switching roles…',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, color: Palette.muted),
             ),
           ),
         ],
@@ -392,7 +465,7 @@ class _SessionPageState extends State<SessionPage> {
     );
   }
 
-  Widget _chatList(bool live) {
+  Widget _chatList() {
     if (_s.chat.isEmpty) {
       return Center(
         child: Column(
@@ -400,13 +473,13 @@ class _SessionPageState extends State<SessionPage> {
           children: [
             Icon(
               Icons.chat_bubble_outline_rounded,
-              color: Palette.ink.withValues(alpha: 0.25),
-              size: 32,
+              color: Palette.ink.withValues(alpha: 0.22),
+              size: 34,
             ),
             const SizedBox(height: 8),
             Text(
               'Live chat. Nothing is saved.',
-              style: TextStyle(color: Palette.ink.withValues(alpha: 0.45)),
+              style: TextStyle(color: Palette.muted),
             ),
           ],
         ),
@@ -415,33 +488,36 @@ class _SessionPageState extends State<SessionPage> {
     final me = _s.isHost ? 'host' : 'guest';
     return ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       itemCount: _s.chat.length,
       itemBuilder: (_, i) {
         final m = _s.chat[i];
         final mine = m.from == me;
+        final sameAsPrev = i > 0 && _s.chat[i - 1].from == m.from;
+        const r = Radius.circular(Radii.bubble);
+        const tail = Radius.circular(5);
         return Align(
           alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 3),
+            margin: EdgeInsets.only(top: sameAsPrev ? 2 : 10),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width * 0.75,
+              maxWidth: MediaQuery.sizeOf(context).width * 0.76,
             ),
             decoration: BoxDecoration(
-              gradient: mine ? Palette.brand : null,
-              color: mine ? null : Palette.ink.withValues(alpha: 0.09),
+              color: mine ? Palette.primary : Palette.tint,
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(18),
-                topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(mine ? 18 : 4),
-                bottomRight: Radius.circular(mine ? 4 : 18),
+                topLeft: r,
+                topRight: r,
+                bottomLeft: mine ? r : tail,
+                bottomRight: mine ? tail : r,
               ),
             ),
             child: Text(
               m.text,
               style: TextStyle(
                 fontSize: 15,
+                height: 1.3,
                 color: mine ? Colors.white : Palette.ink,
               ),
             ),
@@ -454,12 +530,17 @@ class _SessionPageState extends State<SessionPage> {
   Widget _inputBar(bool live) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Container(
-        padding: const EdgeInsets.only(left: 18, right: 6),
-        decoration: glass(radius: 32),
-        child: Row(
-          children: [
-            Expanded(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18),
+              decoration: BoxDecoration(
+                color: Palette.surface,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: Palette.border),
+              ),
               child: TextField(
                 controller: _input,
                 enabled: live,
@@ -470,6 +551,7 @@ class _SessionPageState extends State<SessionPage> {
                   required isFocused,
                   maxLength,
                 }) => null,
+                textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
@@ -478,37 +560,23 @@ class _SessionPageState extends State<SessionPage> {
                     color: Palette.ink.withValues(alpha: 0.4),
                   ),
                   border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 ),
               ),
             ),
-            IconButton.filled(
-              style: IconButton.styleFrom(backgroundColor: Palette.violet),
-              onPressed: live ? _send : null,
-              icon: const Icon(Icons.arrow_upward_rounded),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          CircleButton(
+            size: 48,
+            color: Palette.primary,
+            tooltip: 'Send',
+            onTap: live ? _send : null,
+            child: const Icon(Icons.arrow_upward_rounded, color: Colors.white),
+          ),
+        ],
       ),
     );
   }
-}
-
-class _RoundIcon extends StatelessWidget {
-  const _RoundIcon({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    iconSize: 36,
-    onPressed: onTap == null
-        ? null
-        : () {
-            HapticFeedback.selectionClick();
-            onTap!();
-          },
-    icon: Icon(icon),
-  );
 }
 
 class _PlayPause extends StatefulWidget {
@@ -540,45 +608,17 @@ class _PlayPauseState extends State<_PlayPause>
   }
 
   @override
-  Widget build(BuildContext context) {
-    final enabled = widget.onTap != null;
-    return Opacity(
-      opacity: enabled ? 1 : 0.45,
-      child: Material(
-        color: Colors.transparent,
-        child: Ink(
-          width: 76,
-          height: 76,
-          decoration: BoxDecoration(
-            gradient: Palette.brand,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Palette.violet.withValues(alpha: 0.5),
-                blurRadius: 24,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: !enabled
-                ? null
-                : () {
-                    HapticFeedback.mediumImpact();
-                    widget.onTap!();
-                  },
-            child: Center(
-              child: AnimatedIcon(
-                icon: AnimatedIcons.play_pause,
-                progress: _c,
-                size: 38,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => CircleButton(
+    size: 76,
+    color: Palette.primary,
+    elevation: 3,
+    tooltip: widget.playing ? 'Pause' : 'Play',
+    onTap: widget.onTap,
+    child: AnimatedIcon(
+      icon: AnimatedIcons.play_pause,
+      progress: _c,
+      size: 38,
+      color: Colors.white,
+    ),
+  );
 }

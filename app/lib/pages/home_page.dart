@@ -50,8 +50,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     if (s == AppLifecycleState.resumed) _session.refresh();
   }
 
-  void _say(String m) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _say(String m) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(m)));
+  }
 
   void _openSession() => Navigator.push(
     context,
@@ -64,16 +67,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       if (mounted) setState(() => _busy = '');
     });
     if (!mounted) return;
-    if (ok) {
-      _openSession();
-    } else {
-      _say('Permission was not granted.');
-    }
+    ok ? _openSession() : _say('Permission was not granted.');
   }
 
   Future<void> _join() async {
     final code = _code.text.trim().toUpperCase();
     if (code.length != 6) return _say('Enter the 6-character code.');
+    FocusScope.of(context).unfocus();
     setState(() => _busy = 'join');
     final ok = await _session.join(_server.text.trim(), code).whenComplete(() {
       if (mounted) setState(() => _busy = '');
@@ -88,17 +88,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   void _settings() {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
           24,
-          24,
+          0,
           24,
           24 + MediaQuery.viewInsetsOf(ctx).bottom,
         ),
@@ -106,24 +102,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Server', style: Theme.of(ctx).textTheme.titleLarge),
+            Text(
+              'Server',
+              style: Theme.of(ctx).textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 4),
             Text(
-              'Address of the HamJam relay.',
-              style: TextStyle(color: Palette.ink.withValues(alpha: 0.6)),
+              'Address of the HamJam relay. Applies to the next jam.',
+              style: TextStyle(color: Palette.muted),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _server,
               keyboardType: TextInputType.url,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: Palette.ink.withValues(alpha: 0.07),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-              ),
+              autocorrect: false,
+              decoration: _fieldDecoration(hint: 'ws://192.168.1.10:8080'),
             ),
           ],
         ),
@@ -133,161 +127,199 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final muted = Palette.ink.withValues(alpha: 0.62);
-    return GradientScaffold(
+    final idle = _busy.isEmpty;
+    return AppScaffold(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
         children: [
           Row(
             children: [
-              const GradientText(
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Palette.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.graphic_eq_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
                 'HamJam',
                 style: TextStyle(
-                  fontSize: 26,
+                  fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
+                  letterSpacing: -0.4,
                 ),
               ),
               const Spacer(),
               IconButton(
                 onPressed: _settings,
                 icon: const Icon(Icons.tune_rounded),
-                tooltip: 'Server',
+                tooltip: 'Server settings',
               ),
             ],
           ),
-          const SizedBox(height: 36),
-          Text(
+          const SizedBox(height: 32),
+          const Text(
             'Listen together,',
-            style: t.displaySmall?.copyWith(
+            style: TextStyle(
+              fontSize: 34,
               fontWeight: FontWeight.w800,
-              height: 1.05,
+              height: 1.1,
+              letterSpacing: -0.8,
             ),
           ),
-          const GradientText(
+          const Text(
             'from anywhere.',
             style: TextStyle(
-              fontSize: 36,
+              fontSize: 34,
               fontWeight: FontWeight.w800,
               height: 1.15,
+              letterSpacing: -0.8,
+              color: Palette.primary,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             'Share the sound of any music app with someone far away. They just enter a code.',
-            style: t.bodyLarge?.copyWith(color: muted),
+            style: TextStyle(fontSize: 16, height: 1.4, color: Palette.muted),
           ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 28),
           if (_session.active)
             _ActiveCard(session: _session, onOpen: _openSession)
           else ...[
-            GradientButton(
-              label: 'Host a jam',
-              icon: Icons.podcasts_rounded,
-              loading: _busy == 'host',
-              loadingLabel: 'Starting…',
-              onTap: _busy.isEmpty ? _host : null,
+            _Section(
+              title: 'Host a jam',
+              subtitle: 'Share the audio playing on this phone.',
+              child: PrimaryButton(
+                label: 'Start hosting',
+                icon: Icons.podcasts_rounded,
+                loading: _busy == 'host',
+                loadingLabel: 'Starting…',
+                onTap: idle ? _host : null,
+              ),
             ),
-            const SizedBox(height: 28),
-            Row(
-              children: [
-                Expanded(
-                  child: Divider(color: Palette.ink.withValues(alpha: 0.12)),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'or join one',
-                    style: TextStyle(color: muted, fontSize: 13),
-                  ),
-                ),
-                Expanded(
-                  child: Divider(color: Palette.ink.withValues(alpha: 0.12)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _code,
-                    textAlign: TextAlign.center,
-                    textCapitalization: TextCapitalization.characters,
-                    inputFormatters: [
-                      LengthLimitingTextInputFormatter(6),
-                      FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
-                      TextInputFormatter.withFunction(
-                        (o, n) => n.copyWith(text: n.text.toUpperCase()),
-                      ),
-                    ],
-                    enabled: _busy.isEmpty,
-                    onSubmitted: (_) => _busy.isEmpty ? _join() : null,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 10,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'CODE',
-                      hintStyle: TextStyle(
-                        color: Palette.ink.withValues(alpha: 0.25),
-                        letterSpacing: 10,
-                      ),
-                      filled: true,
-                      fillColor: Palette.ink.withValues(alpha: 0.07),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(
-                          color: Palette.ink.withValues(alpha: 0.10),
+            const SizedBox(height: 16),
+            _Section(
+              title: 'Join a jam',
+              subtitle: 'Enter the 6-character code your partner shares.',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _code,
+                      enabled: idle,
+                      textAlign: TextAlign.center,
+                      textCapitalization: TextCapitalization.characters,
+                      autocorrect: false,
+                      inputFormatters: [
+                        LengthLimitingTextInputFormatter(6),
+                        FilteringTextInputFormatter.allow(
+                          RegExp('[A-Za-z0-9]'),
                         ),
+                        TextInputFormatter.withFunction(
+                          (o, n) => n.copyWith(text: n.text.toUpperCase()),
+                        ),
+                      ],
+                      onSubmitted: (_) => idle ? _join() : null,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 8,
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: const BorderSide(
-                          color: Palette.violet,
-                          width: 1.6,
+                      decoration: _fieldDecoration(hint: 'CODE'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: Material(
+                      color: Palette.primary,
+                      clipBehavior: Clip.antiAlias,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(Radii.button),
+                      ),
+                      child: InkWell(
+                        onTap: idle ? _join : null,
+                        child: Center(
+                          child: _busy == 'join'
+                              ? const Spinner(size: 22, color: Colors.white)
+                              : const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: Colors.white,
+                                ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Material(
-                  color: Colors.transparent,
-                  child: Ink(
-                    decoration: BoxDecoration(
-                      gradient: Palette.brand,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: _busy.isEmpty ? _join : null,
-                      child: SizedBox(
-                        width: 64,
-                        height: 64,
-                        child: _busy == 'join'
-                            ? const Center(
-                                child: Spinner(size: 26, color: Colors.white),
-                              )
-                            : const Icon(
-                                Icons.arrow_forward_rounded,
-                                size: 28,
-                                color: Colors.white,
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ],
       ),
     );
   }
+}
+
+InputDecoration _fieldDecoration({required String hint}) => InputDecoration(
+  hintText: hint,
+  hintStyle: TextStyle(
+    color: Palette.ink.withValues(alpha: 0.28),
+    fontWeight: FontWeight.w600,
+  ),
+  filled: true,
+  fillColor: Palette.bg,
+  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+  enabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(Radii.button),
+    borderSide: const BorderSide(color: Palette.border),
+  ),
+  disabledBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(Radii.button),
+    borderSide: const BorderSide(color: Palette.border),
+  ),
+  focusedBorder: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(Radii.button),
+    borderSide: const BorderSide(color: Palette.primary, width: 2),
+  ),
+);
+
+/// Titled white card holding one action.
+class _Section extends StatelessWidget {
+  const _Section({
+    required this.title,
+    required this.subtitle,
+    required this.child,
+  });
+  final String title;
+  final String subtitle;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(20),
+    decoration: cardDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(subtitle, style: TextStyle(fontSize: 14, color: Palette.muted)),
+        const SizedBox(height: 16),
+        child,
+      ],
+    ),
+  );
 }
 
 class _ActiveCard extends StatelessWidget {
@@ -299,17 +331,17 @@ class _ActiveCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
-      decoration: glass(),
+      decoration: cardDecoration(),
       child: Row(
         children: [
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              gradient: Palette.brand,
-              borderRadius: BorderRadius.circular(16),
+              color: Palette.tint,
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.graphic_eq_rounded, color: Colors.white),
+            child: const Icon(Icons.graphic_eq_rounded, color: Palette.primary),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -326,7 +358,7 @@ class _ActiveCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   'Code ${session.code}',
-                  style: TextStyle(color: Palette.ink.withValues(alpha: 0.6)),
+                  style: TextStyle(color: Palette.muted),
                 ),
               ],
             ),
