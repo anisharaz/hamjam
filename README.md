@@ -35,6 +35,9 @@ player or a podcast app all work the same way.
 - Switch roles: either person can ask to swap host and listener, and the other approves. The room
   code and chat carry over.
 - Runs in the background with a persistent notification that shows the jam is active.
+- Listen from a computer: open `/j/CODE` (or enter the code on the site) in a browser. Browsers listen, chat and use
+  the controls, but only an Android phone can host. Needs a browser that can decode AAC with WebCodecs
+  (current Chrome and Edge; others vary).
 - A small website with a download link, served by the same container as the relay.
 
 ## Repository layout
@@ -137,7 +140,7 @@ The relay speaks JSON text messages plus binary audio frames over one WebSocket.
 | Message | Direction | Purpose |
 |---|---|---|
 | `create` / `created {code}` | host ↔ relay | open a room |
-| `join {code}` / `joined` | listener ↔ relay | join a room |
+| `join {code, client?}` / `joined` | listener ↔ relay | join a room. `client: "web"` marks a browser, which can't host or take part in role swaps |
 | binary frame | host → listeners | one AAC frame |
 | `meta {csd,...}` | host → listeners | codec config, cached for late joiners |
 | `playback {playing}` | host → listeners | whether the host's player is playing |
