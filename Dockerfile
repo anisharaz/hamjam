@@ -14,7 +14,8 @@ FROM node:22-alpine
 ENV NODE_ENV=production \
     PORT=8080 \
     STATIC_DIR=/app/public \
-    DOWNLOADS_DIR=/app/downloads
+    DOWNLOADS_DIR=/app/downloads \
+    APK_UPSTREAM=https://github.com/anisharaz/hamjam/releases/latest/download/HamJam.apk
 WORKDIR /app
 
 # production dependencies first so this layer caches

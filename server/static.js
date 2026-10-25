@@ -2,6 +2,7 @@
 import { createReadStream } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -52,6 +53,43 @@ function sendFile(req, res, file, headers) {
   });
 }
 
+/**
+ * Streams the APK from upstream (the newest GitHub release) so the browser stays on our
+ * domain and gets a real download. Returns false if upstream is unavailable.
+ */
+async function proxyUpstream(req, res, url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000); // only bounds the wait for headers
+  let up;
+  try {
+    up = await fetch(url, { method: req.method, redirect: 'follow', signal: ctrl.signal });
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!up.ok) {
+    up.body?.cancel();
+    return false;
+  }
+  const len = up.headers.get('content-length');
+  res.writeHead(200, {
+    ...SECURITY_HEADERS,
+    'content-type': TYPES['.apk'],
+    'content-disposition': 'attachment; filename="HamJam.apk"',
+    'cache-control': 'no-cache',
+    ...(len ? { 'content-length': len } : {}),
+  });
+  if (req.method === 'HEAD' || !up.body) {
+    up.body?.cancel();
+    res.end();
+    return true;
+  }
+  res.on('close', () => ctrl.abort()); // client left: stop pulling from upstream
+  Readable.fromWeb(up.body).on('error', () => res.destroy()).pipe(res);
+  return true;
+}
+
 /** Highest-numbered N.apk in dir (publish-apk.sh output), else hamjam.apk. */
 async function latestApk(dir) {
   try {
@@ -63,7 +101,7 @@ async function latestApk(dir) {
   return null;
 }
 
-export function createStaticHandler({ staticDir, downloadsDir }) {
+export function createStaticHandler({ staticDir, downloadsDir, apkUpstream }) {
   const root = staticDir ? path.resolve(staticDir) : null;
   const downloads = downloadsDir ? path.resolve(downloadsDir) : null;
 
@@ -77,6 +115,7 @@ export function createStaticHandler({ staticDir, downloadsDir }) {
     if (pathname.startsWith('/download/')) {
       const name = pathname.slice('/download/'.length);
       let file = null;
+      if (name === 'latest.apk' && apkUpstream && (await proxyUpstream(req, res, apkUpstream))) return;
       if (downloads && name === 'latest.apk') file = await latestApk(downloads);
       else if (downloads && /^[\w.-]+\.apk$/.test(name)) {
         const p = safeJoin(downloads, name);

@@ -1,10 +1,10 @@
 import PhoneMock from './PhoneMock.jsx';
 import { Logo, Icon } from './icons.jsx';
 
-// Always the newest GitHub release; the asset name stays HamJam.apk across versions.
-const REPO = 'https://github.com/anisharaz/hamjam';
-const APK_URL = `${REPO}/releases/latest/download/HamJam.apk`;
-const RELEASES_URL = `${REPO}/releases`;
+// Same-origin: the relay streams the newest GitHub release as a real file download,
+// so the browser (or the GitHub app) never takes over the link.
+const APK_URL = '/download/latest.apk';
+const RELEASES_URL = 'https://github.com/anisharaz/hamjam/releases';
 
 const STEPS = [
   { n: 1, title: 'Host starts a jam', text: 'Open HamJam, tap Start hosting and allow screen capture once. You get a 6-character code.' },
@@ -41,7 +41,7 @@ export default function App() {
           <a href="#how">How it works</a>
           <a href="#features">Features</a>
           <a href="#faq">FAQ</a>
-          <a className="btn btn-small" href={APK_URL}>Download</a>
+          <a className="btn btn-small" href={APK_URL} download="HamJam.apk">Download</a>
         </nav>
       </header>
 
@@ -57,7 +57,7 @@ export default function App() {
               control what plays.
             </p>
             <div className="cta">
-              <a className="btn" href={APK_URL}>
+              <a className="btn" href={APK_URL} download="HamJam.apk">
                 <Icon name="download" /> Download for Android
               </a>
               <a className="btn btn-ghost" href="#how">See how it works</a>
@@ -105,7 +105,7 @@ export default function App() {
                 host a jam, or join with your partner&apos;s code.
               </p>
             </div>
-            <a className="btn" href={APK_URL}>
+            <a className="btn" href={APK_URL} download="HamJam.apk">
               <Icon name="download" /> HamJam for Android
             </a>
           </div>

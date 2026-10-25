@@ -117,10 +117,11 @@ and the WebSocket relay.
 Caddy gets and renews the HTTPS certificate. Keep its `caddy_data` volume, or you may hit Let's
 Encrypt rate limits.
 
-The website's download buttons point at the newest GitHub release
-(`https://github.com/anisharaz/hamjam/releases/latest/download/HamJam.apk`), so publishing a release
-is all it takes to ship a new version. The relay also serves `/download/latest.apk` from the mounted
-`apks/` folder (the highest-numbered `N.apk`, or `hamjam.apk`) as a fallback.
+The website's download buttons use `/download/latest.apk` on your own domain. The relay streams the
+newest GitHub release (`APK_UPSTREAM`, default
+`https://github.com/anisharaz/hamjam/releases/latest/download/HamJam.apk`) as a file download, so
+publishing a release is all it takes to ship a new version. If GitHub is unreachable it falls back to
+the highest-numbered `N.apk` in the mounted `apks/` folder.
 
 To cut a release: `RELEASE=1 scripts/publish-apk.sh`, then upload `apks/N.apk` to a GitHub release as
 `HamJam.apk`.

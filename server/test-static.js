@@ -13,8 +13,26 @@ writeFileSync(path.join(site, 'assets', 'app-abc.js'), 'console.log(1)');
 writeFileSync(path.join(tmp, 'secret.txt'), 'top secret');
 for (const n of ['2.apk', '10.apk', '9.apk']) writeFileSync(path.join(dl, n), `apk ${n}`);
 
+// fake "GitHub": serves an APK, plus a path that 404s to exercise the fallback
+import { createServer as createHttp } from 'node:http';
+const upstream = createHttp((req, res) => {
+  if (req.url === '/release/HamJam.apk') {
+    res.writeHead(302, { location: '/cdn/HamJam.apk' }); // like GitHub's redirect to its CDN
+    return res.end();
+  }
+  if (req.url === '/cdn/HamJam.apk') {
+    const body = Buffer.from('release apk from upstream');
+    res.writeHead(200, { 'content-length': body.length, 'content-type': 'application/octet-stream' });
+    return res.end(req.method === 'HEAD' ? undefined : body);
+  }
+  res.writeHead(404).end();
+}).listen(0);
+await new Promise((r) => upstream.on('listening', r));
+const upBase = `http://127.0.0.1:${upstream.address().port}`;
+
 process.env.STATIC_DIR = site;
 process.env.DOWNLOADS_DIR = dl;
+process.env.APK_UPSTREAM = `${upBase}/release/HamJam.apk`;
 const { createServer } = await import('./index.js');
 const wss = createServer(0);
 await new Promise((r) => wss.on('listening', r));
@@ -48,14 +66,22 @@ r = await get('/download/latest.apk');
 assert.equal(r.status, 200);
 assert.equal(r.headers.get('content-type'), 'application/vnd.android.package-archive');
 assert.match(r.headers.get('content-disposition'), /attachment/);
-assert.equal(await r.text(), 'apk 10.apk');
+assert.equal(await r.text(), 'release apk from upstream'); // proxied, redirect followed
+assert.equal(r.headers.get('content-length'), String('release apk from upstream'.length));
 assert.equal(await (await get('/download/2.apk')).text(), 'apk 2.apk');
 assert.equal((await get('/download/..%2fsecret.txt')).status, 404);
 assert.equal((await get('/download/nothing.apk')).status, 404);
 
+// upstream down/404: falls back to the highest-numbered local APK
+upstream.close();
+upstream.closeAllConnections();
+r = await get('/download/latest.apk');
+assert.equal(r.status, 200);
+assert.equal(await r.text(), 'apk 10.apk');
+
 assert.equal((await get('/', { method: 'POST' })).status, 405);
 assert.equal((await get('/healthz')).status, 200);
-const head = await get('/download/latest.apk', { method: 'HEAD' });
+const head = await get('/download/latest.apk', { method: 'HEAD' }); // upstream is down here: local fallback
 assert.equal(head.status, 200);
 assert.equal(await head.text(), '');
 

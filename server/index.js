@@ -9,7 +9,8 @@ const PORT = Number(process.env.PORT || 8080);
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no look-alikes
 const KEYS = new Set(['playPause', 'next', 'previous']);
 const STATIC_DIR = process.env.STATIC_DIR || '';        // built website (web/dist)
-const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || '';  // folder holding APKs
+const DOWNLOADS_DIR = process.env.DOWNLOADS_DIR || '';  // folder holding APKs (fallback)
+const APK_UPSTREAM = process.env.APK_UPSTREAM || '';    // URL of the newest APK, streamed by /download/latest.apk
 const MAX_CHAT = 500;
 const CHAT_BURST = 5; // messages per second per connection
 
@@ -34,7 +35,7 @@ function endRoom(room) {
 
 export function createServer(port = PORT) {
   // Plain HTTP serves the website, APK downloads and health checks; WebSocket upgrades go to the relay.
-  const site = createStaticHandler({ staticDir: STATIC_DIR, downloadsDir: DOWNLOADS_DIR });
+  const site = createStaticHandler({ staticDir: STATIC_DIR, downloadsDir: DOWNLOADS_DIR, apkUpstream: APK_UPSTREAM });
   const http = createHttpServer((req, res) => {
     if (req.url === '/healthz') {
       res.writeHead(200, { 'content-type': 'application/json' });
