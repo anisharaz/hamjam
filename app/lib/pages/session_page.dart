@@ -338,24 +338,35 @@ class _SessionPageState extends State<SessionPage> {
               ],
             ),
           ),
-          CircleButton(
-            size: 48,
-            tooltip: 'Copy code',
-            onTap: _s.code.isEmpty
-                ? null
-                : () {
-                    Clipboard.setData(ClipboardData(text: _s.code));
-                    ScaffoldMessenger.of(context)
-                      ..hideCurrentSnackBar()
-                      ..showSnackBar(
-                        const SnackBar(content: Text('Code copied')),
-                      );
-                  },
-            child: const Icon(
-              Icons.copy_rounded,
-              size: 20,
-              color: Palette.primary,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircleButton(
+                size: 44,
+                tooltip: 'Copy invite link',
+                onTap: _s.inviteLink.isEmpty
+                    ? null
+                    : () => _copy(_s.inviteLink, 'Invite link copied'),
+                child: const Icon(
+                  Icons.link_rounded,
+                  size: 22,
+                  color: Palette.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              CircleButton(
+                size: 44,
+                tooltip: 'Copy code',
+                onTap: _s.code.isEmpty
+                    ? null
+                    : () => _copy(_s.code, 'Code copied'),
+                child: const Icon(
+                  Icons.copy_rounded,
+                  size: 20,
+                  color: Palette.primary,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -431,6 +442,13 @@ class _SessionPageState extends State<SessionPage> {
         ],
       ),
     );
+  }
+
+  void _copy(String text, String message) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _tap(VoidCallback action, {bool heavy = false}) {

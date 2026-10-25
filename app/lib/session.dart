@@ -27,6 +27,7 @@ class Session extends ChangeNotifier {
   String role = ''; // '' when there is no active jam
   String state = 'idle';
   String code = '';
+  String serverUrl = '';
   int guests = 0;
   bool playing = false;
   String swapIn = ''; // partner asked to switch roles: 'host' | 'guest' | ''
@@ -42,6 +43,14 @@ class Session extends ChangeNotifier {
 
   bool get active => role.isNotEmpty;
   bool get isHost => role == 'host';
+
+  /// Link that opens the in-browser listener for this jam, e.g. https://example.com/j/ABC123.
+  String get inviteLink {
+    final base = serverUrl
+        .replaceFirst(RegExp(r'^ws'), 'http')
+        .replaceFirst(RegExp(r'/+$'), '');
+    return code.isEmpty || base.isEmpty ? '' : '$base/j/$code';
+  }
 
   void _onEvent(dynamic e) {
     final m = e as Map;
@@ -103,6 +112,7 @@ class Session extends ChangeNotifier {
     role = s['role'];
     state = s['state'];
     code = s['code'];
+    if ((s['url'] as String?)?.isNotEmpty ?? false) serverUrl = s['url'];
     guests = s['guests'];
     playing = s['playing'];
     swapIn = s['swapIn'];
@@ -115,7 +125,10 @@ class Session extends ChangeNotifier {
 
   Future<bool> host(String url) async {
     final ok = await _method.invokeMethod<bool>('host', {'url': url}) ?? false;
-    if (ok) _begin('host');
+    if (ok) {
+      serverUrl = url;
+      _begin('host');
+    }
     return ok;
   }
 

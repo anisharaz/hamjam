@@ -74,5 +74,5 @@ object Bus {
     }
 
     fun snapshot(): Map<String, Any> = mapOf(
-        "role" to role, "state" to state, "code" to code, "guests" to guests, "playing" to playing, "swapIn" to swapIn, "swapOut" to swapOut, "chat" to chat.toList())
+        "role" to role, "state" to state, "code" to code, "url" to url, "guests" to guests, "playing" to playing, "swapIn" to swapIn, "swapOut" to swapOut, "chat" to chat.toList())
 }

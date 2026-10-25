@@ -92,6 +92,7 @@ export function createServer(port = PORT) {
           if (!r) return send(ws, { type: 'error', error: 'room_not_found' });
           room = r;
           role = 'guest';
+          ws.canHost = msg.client !== 'web'; // browsers can listen but cannot share audio
           room.guests.add(ws);
           send(ws, { type: 'joined', code: room.code });
           if (room.meta) send(ws, room.meta);
@@ -102,16 +103,22 @@ export function createServer(port = PORT) {
       }
 
       if (msg.type === 'swap_request') {
+        if (role === 'guest' && !ws.canHost) return send(ws, { type: 'swap_declined', reason: 'unsupported' });
         if (room.pending || room.swap) return send(ws, { type: 'swap_declined', reason: 'busy' });
-        room.pending = { requester: ws, role };
         const out = { type: 'swap_request', from: role };
-        if (role === 'guest') send(room.host, out);
-        else for (const g of room.guests) send(g, out);
-        if (role === 'host' && room.guests.size === 0) { room.pending = null; send(ws, { type: 'swap_declined', reason: 'no_guest' }); }
+        if (role === 'guest') {
+          room.pending = { requester: ws, role };
+          send(room.host, out);
+        } else {
+          const eligible = [...room.guests].filter((g) => g.canHost);
+          if (!eligible.length) return send(ws, { type: 'swap_declined', reason: 'no_guest' });
+          room.pending = { requester: ws, role };
+          for (const g of eligible) send(g, out);
+        }
       } else if (msg.type === 'swap_response') {
         const p = room.pending;
         // only the opposite side of the requester may answer
-        if (!p || p.role === role) return;
+        if (!p || p.role === role || (role === 'guest' && !ws.canHost)) return;
         room.pending = null;
         const others = p.role === 'guest' ? [] : [...room.guests].filter((g) => g !== ws);
         if (!msg.accept) {

@@ -7,6 +7,7 @@ await new Promise((r) => wss.on('listening', r));
 const url = `ws://127.0.0.1:${wss.address().port}`;
 
 const open = (u) => new Promise((res) => { const w = new WebSocket(u); w.msgs = []; w.on('message', (d, b) => w.msgs.push(b ? d : JSON.parse(d))); w.on('open', () => res(w)); });
+const last = (w, t) => w.msgs.filter((m) => m.type === t).at(-1);
 const wait = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 
 const host = await open(url);
@@ -61,6 +62,31 @@ for (let i = 0; i < 20; i++) guest.send(JSON.stringify({ type: 'chat', text: 'sp
 await wait();
 assert.ok(chats(host).length <= 3 + 5, 'rate limit');
 
+// ---- web (browser) listeners: counted, can chat and control, cannot host
+const web = await open(url);
+web.send(JSON.stringify({ type: 'join', code, client: 'web' }));
+await wait();
+assert.equal(web.msgs[0].type, 'joined');
+assert.deepEqual(last(host, 'guests'), { type: 'guests', count: 2 });
+web.send(JSON.stringify({ type: 'swap_request' })); // a browser can't ask to host
+await wait();
+assert.equal(last(web, 'swap_declined').reason, 'unsupported');
+assert.equal(host.msgs.filter((m) => m.type === 'swap_request').length, 0);
+// host hands over: only the app guest is asked, never the browser
+host.send(JSON.stringify({ type: 'swap_request' }));
+await wait();
+assert.equal(web.msgs.filter((m) => m.type === 'swap_request').length, 0);
+assert.deepEqual(last(guest, 'swap_request'), { type: 'swap_request', from: 'host' });
+web.send(JSON.stringify({ type: 'swap_response', accept: true })); // and it can't answer for it
+await wait();
+assert.equal(last(host, 'swap_go'), undefined);
+guest.send(JSON.stringify({ type: 'swap_response', accept: false }));
+await wait();
+assert.equal(last(host, 'swap_declined').reason, 'declined');
+web.close();
+await wait();
+assert.deepEqual(last(host, 'guests'), { type: 'guests', count: 1 });
+
 // a guest joining later does not receive past chat
 const late = await open(url);
 late.send(JSON.stringify({ type: 'join', code }));
@@ -69,7 +95,6 @@ assert.equal(chats(late).length, 0);
 late.close();
 
 // ---- role swap: guest asks to host, host approves
-const last = (w, t) => w.msgs.filter((m) => m.type === t).at(-1);
 guest.send(JSON.stringify({ type: 'swap_request' }));
 await wait();
 assert.deepEqual(last(host, 'swap_request'), { type: 'swap_request', from: 'guest' });
