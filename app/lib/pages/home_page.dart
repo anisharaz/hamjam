@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../session.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/logo.dart';
 import 'session_page.dart';
 
 const _defaultServer = String.fromEnvironment(
@@ -136,19 +137,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         children: [
           Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Palette.primary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.graphic_eq_rounded,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
+              const Logo(size: 40),
               const SizedBox(width: 12),
               const Text(
                 'HamJam',
@@ -336,15 +325,7 @@ class _ActiveCard extends StatelessWidget {
       decoration: cardDecoration(),
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: Palette.tint,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.graphic_eq_rounded, color: Palette.primary),
-          ),
+          const Logo(size: 48),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
