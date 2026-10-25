@@ -1,7 +1,10 @@
 import PhoneMock from './PhoneMock.jsx';
 import { Logo, Icon } from './icons.jsx';
 
-const APK_URL = '/download/latest.apk';
+// Always the newest GitHub release; the asset name stays HamJam.apk across versions.
+const REPO = 'https://github.com/anisharaz/hamjam';
+const APK_URL = `${REPO}/releases/latest/download/HamJam.apk`;
+const RELEASES_URL = `${REPO}/releases`;
 
 const STEPS = [
   { n: 1, title: 'Host starts a jam', text: 'Open HamJam, tap Start hosting and allow screen capture once. You get a 6-character code.' },
@@ -59,7 +62,10 @@ export default function App() {
               </a>
               <a className="btn btn-ghost" href="#how">See how it works</a>
             </div>
-            <p className="note">Android 10 or newer to host. Listeners need Android too.</p>
+            <p className="note">
+              Android 10 or newer to host. Listeners need Android too.{' '}
+              <a className="link" href={RELEASES_URL}>Release notes and older versions</a>
+            </p>
           </div>
           <PhoneMock />
         </section>

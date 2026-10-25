@@ -117,9 +117,13 @@ and the WebSocket relay.
 Caddy gets and renews the HTTPS certificate. Keep its `caddy_data` volume, or you may hit Let's
 Encrypt rate limits.
 
-`apks/` is mounted read-only into the container. `/download/latest.apk` serves the highest-numbered
-`N.apk` in it (or `hamjam.apk`). To ship a new version, run `scripts/publish-apk.sh` and copy
-`apks/` to the server. No rebuild is needed.
+The website's download buttons point at the newest GitHub release
+(`https://github.com/anisharaz/hamjam/releases/latest/download/HamJam.apk`), so publishing a release
+is all it takes to ship a new version. The relay also serves `/download/latest.apk` from the mounted
+`apks/` folder (the highest-numbered `N.apk`, or `hamjam.apk`) as a fallback.
+
+To cut a release: `RELEASE=1 scripts/publish-apk.sh`, then upload `apks/N.apk` to a GitHub release as
+`HamJam.apk`.
 
 Already have a reverse proxy? Run only the relay with `docker compose up -d --build relay`, proxy
 your domain to `127.0.0.1:8080`, and make sure it passes WebSocket upgrades and does not close idle

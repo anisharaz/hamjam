@@ -53,6 +53,7 @@ h1 { font-size: clamp(38px, 6vw, 62px); font-weight: 800; }
 .lead { font-size: 20px; color: var(--muted); margin: 20px 0 28px; max-width: 520px; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; }
 .note { margin-top: 16px; font-size: 14px; color: var(--muted); }
+.link { color: var(--primary); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 
 /* ---------- sections ---------- */
 .section { padding: 56px 0; }
