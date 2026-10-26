@@ -3,7 +3,8 @@ const BARS = Array.from({ length: 28 }, (_, i) => i);
 
 export default function PhoneMock() {
   return (
-    <div className="phone" aria-hidden="true">
+    <div className="phone-float" aria-hidden="true">
+    <div className="phone">
       <div className="phone-screen">
         <div className="m-header">
           <span className="m-title">Hosting</span>
@@ -30,10 +31,11 @@ export default function PhoneMock() {
         </div>
 
         <div className="m-chat">
-          <p className="bubble them">Can you hear it?</p>
-          <p className="bubble me">Loud and clear 🎧</p>
+          <p className="bubble them" style={{ animationDelay: '1.1s' }}>Can you hear it?</p>
+          <p className="bubble me" style={{ animationDelay: '2.3s' }}>Loud and clear 🎧</p>
         </div>
       </div>
+    </div>
     </div>
   );
 }

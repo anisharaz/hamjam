@@ -107,9 +107,11 @@ export default function JoinPage({ initialCode }) {
 
   return (
     <div className="jp">
-      <header className="nav">
-        <a className="brand" href="/" aria-label="HamJam home"><Logo size={36} /><span>HamJam</span></a>
-        <nav><a href="/">Home</a></nav>
+      <header className="nav-wrap scrolled">
+        <div className="nav">
+          <a className="brand" href="/" aria-label="HamJam home"><Logo size={36} /><span>HamJam</span></a>
+          <nav className="nav-links" aria-label="Main"><a href="/">Home</a></nav>
+        </div>
       </header>
 
       <main className="jp-main">
