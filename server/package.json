@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node index.js", "test": "node test.js && node test-static.js" },
-  "dependencies": { "ws": "^8.18.0" }
+  "scripts": {
+    "start": "node index.js",
+    "test": "LOG=off node test.js && LOG=off node test-static.js && node test-log.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
 }

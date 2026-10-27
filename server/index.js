@@ -24,10 +24,18 @@ function newCode() {
   }
 }
 
+const LOG_ON = process.env.LOG !== 'off';
+const log = (event, fields = {}) => {
+  if (LOG_ON) console.log(JSON.stringify({ t: new Date().toISOString(), event, ...fields }));
+};
+const STATS_EVERY_MS = Number(process.env.STATS_EVERY_MS || 5000);
+const SILENCE_MS = Number(process.env.SILENCE_MS || 5000); // guests waiting longer than this for audio => `no_audio`
+
 const send = (ws, obj) => ws && ws.readyState === ws.OPEN && ws.send(JSON.stringify(obj));
 const SWAP_TIMEOUT_MS = Number(process.env.SWAP_TIMEOUT_MS || 20000);
 
-function endRoom(room) {
+function endRoom(room, reason = 'host_left') {
+  log('room_ended', { code: room.code, reason, guests: room.guests.size, framesTotal: room.stats.framesTotal });
   clearTimeout(room.swap?.timer);
   for (const g of room.guests) { send(g, { type: 'ended' }); g.close(); }
   rooms.delete(room.code);
@@ -46,8 +54,32 @@ export function createServer(port = PORT) {
   });
   const wss = new WebSocketServer({ server: http, maxPayload: 256 * 1024 });
   const closeWss = wss.close.bind(wss);
-  wss.close = (cb) => { closeWss(() => http.close(cb)); http.closeAllConnections?.(); };
+  wss.close = (cb) => { clearInterval(statsTimer); closeWss(() => http.close(cb)); http.closeAllConnections?.(); };
   http.listen(port);
+
+  // Every few seconds: log audio throughput per room, and shout when guests are waiting for audio that isn't coming.
+  const statsTimer = setInterval(() => {
+    const now = Date.now();
+    for (const room of rooms.values()) {
+      const st = room.stats;
+      const guests = room.guests.size;
+      if (st.frames || guests) {
+        log('audio_stats', { code: room.code, framesPerSec: +(st.frames / (STATS_EVERY_MS / 1000)).toFixed(1),
+          kbps: Math.round((st.bytes * 8) / STATS_EVERY_MS), dropped: st.dropped, guests, hasMeta: !!room.meta,
+          hasHost: !!room.host });
+      }
+      const silentFor = st.lastFrameAt ? now - st.lastFrameAt : now - room.createdAt;
+      if (guests && room.host && silentFor > SILENCE_MS && !st.warned) {
+        st.warned = true;
+        log('no_audio', { code: room.code, guests, hasMeta: !!room.meta, everSentAudio: st.framesTotal > 0, silentForMs: silentFor });
+      } else if (st.warned && st.frames) {
+        st.warned = false;
+        log('audio_resumed', { code: room.code });
+      }
+      st.frames = 0; st.bytes = 0; st.dropped = 0;
+    }
+  }, STATS_EVERY_MS);
+  statsTimer.unref();
 
   wss.on('connection', (ws) => {
     let room = null;
@@ -58,9 +90,12 @@ export function createServer(port = PORT) {
       if (isBinary) {
         // audio frame: only the host's frames are relayed
         if (role !== 'host') return;
+        const st = room.stats;
+        st.frames++; st.framesTotal++; st.bytes += data.length; st.lastFrameAt = Date.now();
         for (const g of room.guests) {
           // drop frames for slow guests instead of buffering unbounded latency
           if (g.readyState === g.OPEN && g.bufferedAmount < 512 * 1024) g.send(data, { binary: true });
+          else st.dropped++;
         }
         return;
       }
@@ -70,14 +105,19 @@ export function createServer(port = PORT) {
       if (!role) {
         if (msg.type === 'create') {
           const code = newCode();
-          room = { code, host: ws, guests: new Set() };
+          room = { code, host: ws, guests: new Set(), createdAt: Date.now(),
+            stats: { frames: 0, framesTotal: 0, bytes: 0, dropped: 0, lastFrameAt: 0, warned: false } };
           rooms.set(code, room);
           role = 'host';
+          log('room_created', { code });
           send(ws, { type: 'created', code });
         } else if (msg.type === 'claim') {
           // new host after an approved role swap: needs the one-time token from swap_go
           const r = rooms.get(String(msg.code || '').toUpperCase());
-          if (!r || !r.swap || r.swap.token !== msg.token) return send(ws, { type: 'error', error: 'claim_rejected' });
+          if (!r || !r.swap || r.swap.token !== msg.token) {
+            log('claim_rejected', { code: String(msg.code || '').toUpperCase() });
+            return send(ws, { type: 'error', error: 'claim_rejected' });
+          }
           clearTimeout(r.swap.timer);
           r.swap = null;
           r.host = ws;
@@ -85,11 +125,16 @@ export function createServer(port = PORT) {
           r.playback = null;
           room = r;
           role = 'host';
+          log('claim_ok', { code: r.code, guests: r.guests.size });
+          r.stats.warned = false;
           send(ws, { type: 'created', code: r.code });
           send(ws, { type: 'guests', count: r.guests.size });
         } else if (msg.type === 'join') {
           const r = rooms.get(String(msg.code || '').toUpperCase());
-          if (!r) return send(ws, { type: 'error', error: 'room_not_found' });
+          if (!r) {
+            log('join_failed', { reason: 'room_not_found', code: String(msg.code || '').toUpperCase() });
+            return send(ws, { type: 'error', error: 'room_not_found' });
+          }
           room = r;
           role = 'guest';
           ws.canHost = msg.client !== 'web'; // browsers can listen but cannot share audio
@@ -98,6 +143,8 @@ export function createServer(port = PORT) {
           if (room.meta) send(ws, room.meta);
           if (room.playback) send(ws, room.playback);
           send(room.host, { type: 'guests', count: room.guests.size });
+          log('guest_joined', { code: room.code, client: ws.canHost ? 'app' : 'web', guests: room.guests.size,
+            hasMeta: !!room.meta, framesSoFar: room.stats.framesTotal });
         }
         return;
       }
@@ -105,6 +152,7 @@ export function createServer(port = PORT) {
       if (msg.type === 'swap_request') {
         if (role === 'guest' && !ws.canHost) return send(ws, { type: 'swap_declined', reason: 'unsupported' });
         if (room.pending || room.swap) return send(ws, { type: 'swap_declined', reason: 'busy' });
+        log('swap_request', { code: room.code, from: role });
         const out = { type: 'swap_request', from: role };
         if (role === 'guest') {
           room.pending = { requester: ws, role };
@@ -129,7 +177,8 @@ export function createServer(port = PORT) {
         const newHost = p.role === 'guest' ? p.requester : ws;
         const oldHost = room.host;
         const token = randomBytes(16).toString('hex');
-        room.swap = { token, newHost, oldHost, timer: setTimeout(() => endRoom(room), SWAP_TIMEOUT_MS) };
+        log('swap_accepted', { code: room.code });
+        room.swap = { token, newHost, oldHost, timer: setTimeout(() => endRoom(room, 'swap_timeout'), SWAP_TIMEOUT_MS) };
         for (const g of others) send(g, { type: 'swap_cancelled' });
         send(newHost, { type: 'swap_go', newRole: 'host', token });
         send(oldHost, { type: 'swap_go', newRole: 'guest' });
@@ -147,10 +196,12 @@ export function createServer(port = PORT) {
       } else if (role === 'host' && msg.type === 'playback') {
         // is the host's player playing? cached for late joiners
         room.playback = { type: 'playback', playing: !!msg.playing };
+        log('playback', { code: room.code, playing: room.playback.playing });
         for (const g of room.guests) send(g, room.playback);
       } else if (role === 'host' && msg.type === 'meta') {
         // now-playing / codec config etc. cached so late joiners get it
         room.meta = msg;
+        log('meta', { code: room.code, sampleRate: msg.sampleRate, channels: msg.channels, csdBytes: msg.csd ? Buffer.from(String(msg.csd), 'base64').length : 0, guests: room.guests.size });
         for (const g of room.guests) send(g, msg);
       }
     });
@@ -169,6 +220,7 @@ export function createServer(port = PORT) {
         endRoom(room);
       } else {
         room.guests.delete(ws);
+        log('guest_left', { code: room.code, guests: room.guests.size });
         send(room.host, { type: 'guests', count: room.guests.size });
       }
     });
