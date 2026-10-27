@@ -19,7 +19,7 @@ else
 fi
 
 if [ -n "${RELEASE:-}" ]; then
-  (cd app && flutter build apk --release --target-platform android-arm64 --dart-define=SERVER_URL="$URL")
+  (cd app && flutter build apk --release --no-shrink --target-platform android-arm64 --dart-define=SERVER_URL="$URL")
   APK=app/build/app/outputs/flutter-apk/app-release.apk
 else
   (cd app && flutter build apk --debug --dart-define=SERVER_URL="$URL")

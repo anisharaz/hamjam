@@ -323,11 +323,8 @@ class _SessionPageState extends State<SessionPage> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        n == 0
-                            ? 'Waiting for someone to join'
-                            : (n == 1
-                                  ? '1 person listening'
-                                  : '$n people listening'),
+                        '${n == 0 ? 'Waiting for someone to join' : (n == 1 ? '1 person listening' : '$n people listening')}'
+                        '${n == 0 ? '' : ' · ${_s.audioStatus}'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 13, color: Palette.muted),
@@ -382,11 +379,22 @@ class _SessionPageState extends State<SessionPage> {
           const Icon(Icons.headphones_rounded, color: Palette.primary),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'Listening to your partner',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Listening to your partner',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  _s.audioStatus,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: Palette.muted),
+                ),
+              ],
             ),
           ),
           Text(

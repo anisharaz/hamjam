@@ -31,6 +31,14 @@ class GuestService : Service(), Relay.Listener {
     private val frames = LinkedBlockingQueue<ByteArray>()
     @Volatile private var playing = false
     private var player: Thread? = null
+    // reports the received-frame count once a second, so the UI can tell "stalled" from "flowing"
+    private val statsTick = android.os.Handler(android.os.Looper.getMainLooper())
+    private val statsRunnable = object : Runnable {
+        override fun run() {
+            Bus.emit("frames" to Bus.frames)
+            statsTick.postDelayed(this, 1000)
+        }
+    }
     private val keepAlive by lazy { KeepAlive(this) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -53,6 +61,8 @@ class GuestService : Service(), Relay.Listener {
         code = intent!!.getStringExtra(EXTRA_CODE)!!
         current = this
         keepAlive.acquire()
+        statsTick.removeCallbacks(statsRunnable)
+        statsTick.post(statsRunnable)
         val r = Relay(intent.getStringExtra(EXTRA_URL)!!, this)
         relay = r
         Bus.begin("guest", intent.getStringExtra(EXTRA_URL)!!) { r.sendJson(it) }
@@ -86,9 +96,9 @@ class GuestService : Service(), Relay.Listener {
                 JamNotification.onChat(this, from, text)
             }
             "ended" -> shutdown("the host ended the jam")
-            "meta" -> if (msg.has("csd")) startPlayer(
+            "meta" -> if (msg.has("csd")) { Bus.emit("codec" to true); startPlayer(
                 msg.getInt("sampleRate"), msg.getInt("channels"),
-                Base64.decode(msg.getString("csd"), Base64.NO_WRAP))
+                Base64.decode(msg.getString("csd"), Base64.NO_WRAP)) }
         }
     }
 
@@ -109,6 +119,7 @@ class GuestService : Service(), Relay.Listener {
     }
 
     override fun onAudio(frame: ByteArray) {
+        Bus.frames++
         while (frames.size >= MAX_QUEUED_FRAMES) frames.poll()
         frames.offer(frame)
     }
@@ -205,6 +216,7 @@ class GuestService : Service(), Relay.Listener {
         playing = false
         if (Thread.currentThread() !== player) player?.join(500)
         player = null
+        statsTick.removeCallbacks(statsRunnable)
         relay?.close(); relay = null
         keepAlive.release()
         JamNotification.cancelSwapRequest(this)

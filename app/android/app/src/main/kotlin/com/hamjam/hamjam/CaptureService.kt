@@ -34,6 +34,8 @@ class CaptureService : Service(), Relay.Listener {
         const val ACTION_STOP = "stop"
         const val SAMPLE_RATE = 48000
         const val CHANNELS = 2
+        // AudioSpecificConfig for AAC-LC, 48 kHz, stereo: objectType 2 | rate index 3 | channels 2
+        private val AAC_LC_48K_STEREO = byteArrayOf(0x11, 0x90.toByte())
     }
 
     @Volatile private var running = false
@@ -182,6 +184,9 @@ class CaptureService : Service(), Relay.Listener {
             running = true
             rec.startRecording()
             Bus.emit("state" to "capturing")
+            // Tell listeners the codec setup now instead of waiting for the encoder to emit it: not every
+            // phone's AAC encoder emits a separate config packet, and without it nobody can start playing.
+            sendMeta(AAC_LC_48K_STEREO)
             thread = Thread { captureLoop(rec, enc) }.also { it.start() }
         } catch (e: Exception) {
             shutdown("error: ${e.message}")
@@ -194,6 +199,7 @@ class CaptureService : Service(), Relay.Listener {
         var ptsUs = 0L
         var lastReport = 0L
         var lastPoll = 0L
+        var lastStats = 0L
         var lastPlaying: Boolean? = null
         val audio = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         try {
@@ -221,6 +227,10 @@ class CaptureService : Service(), Relay.Listener {
                         relay?.sendJson(JSONObject().put("type", "playback").put("playing", p))
                     }
                 }
+                if (now - lastStats >= 1000) {
+                    lastStats = now
+                    Bus.emit("frames" to Bus.frames)
+                }
                 if (now - lastReport >= 100) {
                     lastReport = now
                     var sum = 0.0
@@ -243,16 +253,21 @@ class CaptureService : Service(), Relay.Listener {
             ob.position(info.offset)
             ob.get(bytes)
             if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                relay?.sendJson(JSONObject()
-                    .put("type", "meta")
-                    .put("sampleRate", SAMPLE_RATE)
-                    .put("channels", CHANNELS)
-                    .put("csd", Base64.encodeToString(bytes, Base64.NO_WRAP)))
+                sendMeta(bytes)
             } else if (info.size > 0) {
                 relay?.sendAudio(bytes)
+                Bus.frames++
             }
             enc.releaseOutputBuffer(oi, false)
         }
+    }
+
+    private fun sendMeta(csd: ByteArray) {
+        relay?.sendJson(JSONObject()
+            .put("type", "meta")
+            .put("sampleRate", SAMPLE_RATE)
+            .put("channels", CHANNELS)
+            .put("csd", Base64.encodeToString(csd, Base64.NO_WRAP)))
     }
 
     // ---- lifecycle ----

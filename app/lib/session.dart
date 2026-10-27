@@ -30,6 +30,9 @@ class Session extends ChangeNotifier {
   String serverUrl = '';
   int guests = 0;
   bool playing = false;
+  int frames = 0; // audio frames sent (host) or received (guest) this session
+  bool codec = false; // guest: the host's codec setup has arrived
+  bool flowing = false; // frames increased during the last second
   String swapIn = ''; // partner asked to switch roles: 'host' | 'guest' | ''
   bool swapOut = false; // we asked and are waiting for an answer
   bool swapBusy = false; // our side of a switch is in progress (permission prompt, handshake)
@@ -43,6 +46,18 @@ class Session extends ChangeNotifier {
 
   bool get active => role.isNotEmpty;
   bool get isHost => role == 'host';
+
+  /// One line telling both people whether audio is actually moving, to find where a silent jam breaks.
+  String get audioStatus {
+    if (isHost) {
+      return frames == 0
+          ? 'No audio sent yet'
+          : (flowing ? 'Sending audio' : 'Audio stopped being sent');
+    }
+    if (!codec) return 'Waiting for the host\'s audio';
+    if (frames == 0) return 'Waiting for audio…';
+    return flowing ? 'Receiving audio' : 'Audio stopped arriving';
+  }
 
   /// Link that opens the in-browser listener for this jam, e.g. https://example.com/j/ABC123.
   String get inviteLink {
@@ -64,6 +79,9 @@ class Session extends ChangeNotifier {
       swapIn = '';
       swapOut = false;
       swapBusy = false;
+      frames = 0;
+      codec = false;
+      flowing = false;
       if (before.isNotEmpty && before != role) {
         toast.value = role == 'host'
             ? 'You are now the host'
@@ -83,6 +101,12 @@ class Session extends ChangeNotifier {
       }
     }
     if (m['code'] != null) code = m['code'];
+    if (m['codec'] != null) codec = m['codec'];
+    if (m['frames'] != null) {
+      final n = (m['frames'] as num).toInt();
+      flowing = n > frames;
+      frames = n;
+    }
     if (m['guests'] != null) guests = m['guests'];
     if (m['playing'] != null) playing = m['playing'];
     if (m['chat'] != null) chat.add(_msg(m['chat']));
@@ -115,6 +139,9 @@ class Session extends ChangeNotifier {
     if ((s['url'] as String?)?.isNotEmpty ?? false) serverUrl = s['url'];
     guests = s['guests'];
     playing = s['playing'];
+    frames = (s['frames'] as num?)?.toInt() ?? 0;
+    codec = s['codec'] ?? false;
+    flowing = false;
     swapIn = s['swapIn'];
     swapOut = s['swapOut'];
     chat
@@ -148,6 +175,9 @@ class Session extends ChangeNotifier {
     state = 'connecting';
     guests = 0;
     playing = false;
+    frames = 0;
+    codec = false;
+    flowing = false;
     level.value = 0;
     chat.clear();
     notifyListeners();

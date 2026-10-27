@@ -19,6 +19,9 @@ object Bus {
     @Volatile var guests = 0
     @Volatile var playing = false
     @Volatile var url = ""
+    /** Audio frames sent (host) or received (guest) in this session, and whether codec setup has arrived. */
+    @Volatile var frames = 0L
+    @Volatile var codec = false
     /** Role swap in flight: services hand over to each other without ending the session. */
     @Volatile var swapping = false
     /** True while the app is on screen (then the in-app dialog is enough, no notification). */
@@ -32,7 +35,7 @@ object Bus {
     fun begin(role: String, url: String, sender: (JSONObject) -> Unit) {
         val keep = swapping   // after a role swap the room code and chat carry over
         this.role = role; this.sender = sender; this.url = url
-        state = "connecting"; guests = 0; playing = false
+        state = "connecting"; guests = 0; playing = false; frames = 0; codec = false
         swapIn = ""; swapOut = false; swapping = false
         if (!keep) { code = ""; chat.clear() }
         emit("role" to role, "state" to state, "code" to code)
@@ -51,6 +54,8 @@ object Bus {
             "code" -> code = v as String
             "guests" -> guests = v as Int
             "playing" -> playing = v as Boolean
+            "frames" -> frames = v as Long
+            "codec" -> codec = v as Boolean
         }
         sink?.invoke(mapOf(*kv))
     }
@@ -74,5 +79,5 @@ object Bus {
     }
 
     fun snapshot(): Map<String, Any> = mapOf(
-        "role" to role, "state" to state, "code" to code, "url" to url, "guests" to guests, "playing" to playing, "swapIn" to swapIn, "swapOut" to swapOut, "chat" to chat.toList())
+        "role" to role, "state" to state, "code" to code, "url" to url, "guests" to guests, "playing" to playing, "frames" to frames, "codec" to codec, "swapIn" to swapIn, "swapOut" to swapOut, "chat" to chat.toList())
 }
